@@ -69,8 +69,13 @@ function bindThemeToggle() {
     const doApply = () => { applyTheme(goLight); update(); };
 
     if (document.startViewTransition) {
-      // View Transitions API — native cross-fade (Chrome / Edge)
-      document.startViewTransition(doApply);
+      // View Transitions API — native cross-fade (Chrome / Edge).
+      // Suppress element-level CSS transitions during the cross-fade to prevent
+      // double-animation flicker (elements reacting to custom-property changes
+      // while the page-level overlay is also animating).
+      document.documentElement.classList.add('view-transitioning');
+      const vt = document.startViewTransition(doApply);
+      vt.finished.then(() => document.documentElement.classList.remove('view-transitioning'));
     } else {
       // Fallback for Safari / Firefox — fade body out, swap, fade back in
       const body = document.body;

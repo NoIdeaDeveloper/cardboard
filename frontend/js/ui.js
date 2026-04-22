@@ -2611,7 +2611,23 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
           <button class="btn btn-secondary btn-sm" id="add-goal-btn" style="margin-left:auto">+ Add Goal</button>
         </div>
         <div class="health-info-popover" hidden>
-          <div class="health-info-popover-inner"><p class="health-info-intro">Set personal milestones and track your progress. Goals update automatically as you log plays, rate games, or grow your collection. Completed goals are kept for reference.</p></div>
+          <div class="health-info-popover-inner">
+            <p class="health-info-intro">Set personal milestones and track your progress automatically. Goals update as you log plays, rate games, or grow your collection. Completed goals are kept for reference.</p>
+            <div class="health-info-factors">
+              <div class="health-info-factor">
+                <div class="health-info-factor-header"><span class="hb-label">Sessions</span></div>
+                <span class="hb-detail" style="font-size:0.8rem">Total Sessions · Sessions This Year · Total Hours Played · Different Games This Year · Sessions for One Game</span>
+              </div>
+              <div class="health-info-factor">
+                <div class="health-info-factor-header"><span class="hb-label">Collection</span></div>
+                <span class="hb-detail" style="font-size:0.8rem">Play All Owned Games · Unique Mechanics Played · Categories Covered</span>
+              </div>
+              <div class="health-info-factor">
+                <div class="health-info-factor-header"><span class="hb-label">Performance</span></div>
+                <span class="hb-detail" style="font-size:0.8rem">Win Rate Target — tracks your win percentage across all logged sessions where a winner was recorded</span>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="goal-cards" id="goal-cards-list">
           ${goalCards}

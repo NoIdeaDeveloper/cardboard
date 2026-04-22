@@ -96,6 +96,14 @@
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* While the view-transition overlay is active, suppress all element-level CSS
+   transitions so they don't flicker alongside the page cross-fade. */
+html.view-transitioning *,
+html.view-transitioning *::before,
+html.view-transitioning *::after {
+  transition: none !important;
+}
+
 html { font-size: 16px; }
 
 body {
@@ -1338,7 +1346,7 @@ button.footer-link {
 }
 
 .empty-headline { font-size: 1.7rem; font-family: var(--font-display); color: var(--text); font-weight: 700; margin: 0; }
-.empty-tagline { font-size: 0.93rem; color: var(--text-2); max-width: 380px; margin: 0; }
+.empty-tagline { font-size: 0.93rem; color: var(--text-2); max-width: 380px; margin: 0; text-align: center; }
 
 .empty-feature-grid {
   display: grid;
