@@ -3980,6 +3980,16 @@ input[type="date"] { color-scheme: dark; }
   margin-top: 12px;
   border-top: 1px solid var(--border);
 }
+.stats-export-group.highlight {
+  border-radius: var(--radius-sm);
+  animation: exportGroupHighlight 2s ease forwards;
+}
+@keyframes exportGroupHighlight {
+  0%   { background: transparent; }
+  15%  { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  60%  { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  100% { background: transparent; }
+}
 .stats-export-label {
   font-size: 0.75rem;
   color: var(--text-3);

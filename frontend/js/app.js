@@ -160,9 +160,8 @@
     updateShareBadge();
     const emptyBggBtn = document.getElementById('empty-bgg-import-btn');
     if (emptyBggBtn) emptyBggBtn.addEventListener('click', () => {
+      _pendingBggHighlight = true;
       switchView('stats');
-      // Give the stats view time to load, then click the BGG import button
-      setTimeout(() => document.getElementById('stats-import-bgg')?.click(), 600);
     });
     syncCollectionUI();
     // Load players for autocomplete (non-blocking)
@@ -2557,6 +2556,7 @@
 
   // ===== Stats =====
   let _statsLoading = false;
+  let _pendingBggHighlight = false; // set when user clicks "Import from BGG" on the empty state
   const STATS_PREFS_KEY = 'cardboard_stats_prefs';
   const STATS_PREFS_DEFAULTS = {
     show_summary: true, show_most_played: true, show_top_players: true,
@@ -3023,6 +3023,27 @@
       const game = state.games.find(g => g.id === parseInt(row.dataset.gameId, 10));
       if (game) openGameModal(game);
     });
+
+    // If the user came here via the empty-state "Import from BGG" button, open the
+    // settings panel and highlight the Import from BGG row so they know where to go.
+    if (_pendingBggHighlight) {
+      _pendingBggHighlight = false;
+      const settingsBtn   = statsView.querySelector('#stats-settings-btn');
+      const settingsPanel = statsView.querySelector('#stats-settings-panel');
+      if (settingsBtn && settingsPanel) {
+        settingsPanel.style.display = 'block';
+        settingsBtn.classList.add('active');
+        // Find the "Import from BGG" group by its label text
+        const bggGroup = [...statsView.querySelectorAll('.stats-export-group')].find(
+          g => g.querySelector('.stats-export-label')?.textContent.trim() === 'Import from BGG'
+        );
+        if (bggGroup) {
+          bggGroup.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          bggGroup.classList.add('highlight');
+          bggGroup.addEventListener('animationend', () => bggGroup.classList.remove('highlight'), { once: true });
+        }
+      }
+    }
   }
 
   function _injectMilestonesIntoGrid(statsView, prefs) {
