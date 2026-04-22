@@ -21,8 +21,10 @@ A self-hosted board game collection tracker. FastAPI + vanilla JS frontend in a 
 
 ## Quick Start
 
+### Docker Compose (recommended)
+
 ```bash
-git clone https://github.com/NoIdeaDeveloper/cardboard-v2.git cardboard
+git clone https://github.com/NoIdeaDeveloper/cardboard.git cardboard
 cd cardboard
 cp .env.example .env          # optional — edit to change port, data path, etc.
 docker compose up -d
@@ -30,11 +32,66 @@ docker compose up -d
 
 Open `http://localhost:8000`. Data is persisted to `./data/` on the host.
 
+**Update** (pulls the latest published release):
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+### Pre-built image (Docker Hub / GHCR)
+
+A pre-built image is published to the GitHub Container Registry on every push to `main`:
+
+```
+ghcr.io/noidea developer/cardboard:latest
+```
+
+Pull and run without cloning the repo:
+
+```bash
+docker run -d \
+  --name cardboard \
+  --restart unless-stopped \
+  -p 8000:8000 \
+  -v /path/to/data:/app/data \
+  -e DATABASE_URL=sqlite:////app/data/cardboard.db \
+  -e FRONTEND_PATH=/app/frontend \
+  ghcr.io/noidea developer/cardboard:latest
+```
+
 **Update:**
 
 ```bash
-git pull && docker compose up -d --build
+docker pull ghcr.io/noidea developer/cardboard:latest
+docker stop cardboard && docker rm cardboard
+# re-run the docker run command above
 ```
+
+### Unraid
+
+1. In the Unraid UI go to **Docker → Add Container**.
+2. Fill in the fields:
+
+| Field | Value |
+|---|---|
+| Name | `cardboard` |
+| Repository | `ghcr.io/noidea developer/cardboard:latest` |
+| Network Type | `Bridge` |
+| Port (host → container) | `8000 → 8000` |
+| Path (host → container) | `/mnt/user/appdata/cardboard → /app/data` |
+
+3. Add the following environment variables under **Extra Parameters** or the Variables section:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | `sqlite:////app/data/cardboard.db` |
+| `FRONTEND_PATH` | `/app/frontend` |
+
+4. Click **Apply**. The container will pull the image and start. Open `http://<unraid-ip>:8000`.
+
+**Update on Unraid:** Stop the container, click the image tag, select **Pull latest**, then restart.
+
+Alternatively, install the **Compose Manager** plugin and use the `docker-compose.yml` from this repo, setting `DATA_PATH=/mnt/user/appdata/cardboard`.
 
 ## Features
 
