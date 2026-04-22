@@ -40,7 +40,7 @@ docker compose pull && docker compose up -d
 
 ### Pre-built image (Docker Hub / GHCR)
 
-A pre-built image is published to the GitHub Container Registry on every push to `main`:
+A pre-built image is published to the GitHub Container Registry on every version tag:
 
 ```
 ghcr.io/noideadeveloper/cardboard:latest
@@ -54,8 +54,6 @@ docker run -d \
   --restart unless-stopped \
   -p 8000:8000 \
   -v /path/to/data:/app/data \
-  -e DATABASE_URL=sqlite:////app/data/cardboard.db \
-  -e FRONTEND_PATH=/app/frontend \
   ghcr.io/noideadeveloper/cardboard:latest
 ```
 
@@ -80,14 +78,7 @@ docker stop cardboard && docker rm cardboard
 | Port (host → container) | `8000 → 8000` |
 | Path (host → container) | `/mnt/user/appdata/cardboard → /app/data` |
 
-3. Add the following environment variables under **Extra Parameters** or the Variables section:
-
-| Variable | Value |
-|---|---|
-| `DATABASE_URL` | `sqlite:////app/data/cardboard.db` |
-| `FRONTEND_PATH` | `/app/frontend` |
-
-4. Click **Apply**. The container will pull the image and start. Open `http://<unraid-ip>:8000`.
+3. Click **Apply**. The container will pull the image and start. Open `http://<unraid-ip>:8000`.
 
 **Update on Unraid:** Stop the container, click the image tag, select **Pull latest**, then restart.
 
@@ -103,7 +94,7 @@ Alternatively, install the **Compose Manager** plugin and use the `docker-compos
 - **Player profiles** — per-player stats, win rates, top games, co-player leaderboard with head-to-head records
 - **Stats dashboard** — totals, most-played, player leaderboard, rating distribution, added/sessions-by-month charts, 52-week activity heatmap, day-of-week breakdown, shelf of shame, collection value
 - **Goals & challenges** — progress-tracked goals (total sessions, play all owned, unique mechanics, etc.) with auto-complete detection
-- **Sharing** — token-based read-only share links with optional expiry; visitors can browse, filter, and submit "want to play" requests
+- **Sharing** — token-based read-only share links with optional expiry; visitors can browse, filter, and submit "want to play" requests; export a self-contained static HTML page to share without exposing your server
 - **Game night** — suggestion engine filtered by player count and playtime; random "Pick for Me" selector
 - **Quality of life** — dark/light theme, keyboard shortcuts overlay, milestone confetti, PWA support, ETag caching
 
