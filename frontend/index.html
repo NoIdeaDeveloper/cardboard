@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>(function(){var t=localStorage.getItem('cardboard_theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');})();</script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cardboard</title>
+  <link rel="icon" type="image/png" href="cardboard-icon.png" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#1a1a2e" />
+  <link rel="stylesheet" href="fonts/local-fonts.css" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <img class="logo-icon" src="cardboard-icon.png" alt="Cardboard" />
+        <span class="logo-text">Cardboard</span>
+      </div>
+      <nav class="nav">
+        <button class="nav-btn active" data-view="collection" title="My Collection">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h6v6h-6z"/></svg>
+          <span>Collection</span>
+        </button>
+        <button class="nav-btn" data-view="add" title="Add Game">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          <span class="nav-label-full">Add Game</span><span class="nav-label-short" aria-hidden="true">Add</span>
+        </button>
+        <button class="nav-btn" id="nav-btn-stats" data-view="stats" title="Statistics">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span>Stats</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- Collection View -->
+    <section id="view-collection" class="view active">
+      <div class="collection-toolbar">
+        <div class="search-wrapper">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="collection-search" class="search-input" placeholder="Search your collection…" autocomplete="off" aria-label="Search your collection" />
+          <button class="clear-search" id="clear-search" title="Clear search" style="display:none">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="toolbar-controls">
+          <div class="sort-group">
+            <label class="sort-label" for="sort-by">Sort by</label>
+            <select id="sort-by" class="select">
+              <option value="name">Name</option>
+              <option value="date_added">Date Added</option>
+              <option value="user_rating">My Rating</option>
+              <option value="min_playtime">Playtime</option>
+              <option value="min_players">Players</option>
+              <option value="difficulty">Difficulty</option>
+              <option value="last_played">Last Played</option>
+              <option value="purchase_date">Purchase Date</option>
+              <option value="purchase_price">Purchase Price</option>
+              <option value="priority">Wishlist Priority</option>
+              <option value="heat_level">Hot</option>
+            </select>
+            <button id="sort-dir" class="icon-btn sort-dir-btn" title="Toggle sort direction" aria-label="Toggle sort direction" data-dir="asc">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M7 12h10M11 18h2"/></svg>
+            </button>
+          </div>
+          <button class="icon-btn" id="show-expansions-btn" title="Show expansions" aria-label="Show expansions" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h7"/><path d="M15 15l3 3 3-3"/><line x1="18" y1="18" x2="18" y2="12"/></svg>
+          </button>
+          <div class="view-toggle" role="group" aria-label="View mode">
+            <button class="icon-btn active" id="view-grid" title="Grid view" aria-label="Grid view">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            </button>
+            <button class="icon-btn" id="view-list" title="List view" aria-label="List view">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </button>
+          </div>
+          <button class="icon-btn" id="bulk-select-toggle" title="Select games for bulk actions" aria-label="Select games for bulk actions" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="4" height="4" rx="1"/><polyline points="9 7 15 7"/><rect x="3" y="11" width="4" height="4" rx="1"/><polyline points="9 13 21 13"/><rect x="3" y="17" width="4" height="4" rx="1"/><polyline points="9 19 17 19"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Active filter indicator -->
+      <div id="filter-active-bar" class="filter-active-bar" style="display:none">
+        <span id="filter-active-label" class="filter-active-label"></span>
+        <button class="filter-active-clear" id="filter-active-clear">Clear filters</button>
+      </div>
+
+      <!-- Advanced filter panel -->
+      <div class="filter-panel" id="filter-panel">
+        <div class="filter-panel-inner">
+          <button class="filter-pill" id="filter-never-played">Never Played</button>
+          <div class="filter-field">
+            <label class="filter-label" for="filter-players">Players</label>
+            <input type="number" id="filter-players" class="filter-input" min="1" max="99" placeholder="any" autocomplete="off">
+          </div>
+          <div class="filter-field">
+            <label class="filter-label" for="filter-time">Time</label>
+            <input type="number" id="filter-time" class="filter-input" min="1" placeholder="any" autocomplete="off">
+            <span class="filter-unit">min</span>
+          </div>
+          <button class="pick-for-me-btn" id="game-night-btn" aria-label="Open game night planner">🎲 Game Night</button>
+          <div id="filter-locations-chips" class="filter-chips-row" style="display:none"></div>
+          <div id="filter-mechanics-chips" class="filter-chips-row" style="display:none"></div>
+          <div id="filter-categories-chips" class="filter-chips-row" style="display:none"></div>
+          <button class="filter-clear-all" id="filter-clear-all">Clear filters</button>
+        </div>
+      </div>
+
+      <!-- Status filter pills -->
+      <div class="status-pills" id="status-pills">
+        <button class="pill" data-status="all">All</button>
+        <button class="pill active" data-status="owned">Owned</button>
+        <button class="pill" data-status="wishlist">Wishlist</button>
+        <button class="pill" data-status="sold">Sold</button>
+      </div>
+
+      <div id="collection-stats" class="collection-stats" role="status" aria-live="polite"></div>
+      <div id="bulk-toolbar" class="bulk-toolbar" style="display:none" role="toolbar" aria-label="Bulk actions"></div>
+
+      <div id="recently-played-shelf" style="display:none"></div>
+
+      <div id="games-container" class="games-grid">
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+          <p>Loading your collection…</p>
+        </div>
+      </div>
+
+      <div id="empty-state" class="empty-state" style="display:none">
+        <img src="cardboard-icon.png" alt="" class="empty-app-icon" aria-hidden="true">
+        <h2 class="empty-headline">Welcome to Cardboard</h2>
+        <p class="empty-tagline">Your personal board game library. Track what you own, how often you play, and what to play next.</p>
+        <div class="empty-feature-grid">
+          <div class="empty-feature-card">
+            <div class="empty-feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </div>
+            <div class="empty-feature-text">
+              <strong>Your Collection</strong>
+              <span>Catalog games with ratings, notes, and cover art</span>
+            </div>
+          </div>
+          <div class="empty-feature-card">
+            <div class="empty-feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div class="empty-feature-text">
+              <strong>Play Tracking</strong>
+              <span>Log sessions, track players, and see your history</span>
+            </div>
+          </div>
+          <div class="empty-feature-card">
+            <div class="empty-feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            </div>
+            <div class="empty-feature-text">
+              <strong>Stats &amp; Insights</strong>
+              <span>Charts, trends, and personalized recommendations</span>
+            </div>
+          </div>
+          <div class="empty-feature-card">
+            <div class="empty-feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg>
+            </div>
+            <div class="empty-feature-text">
+              <strong>Game Night</strong>
+              <span>Get smart suggestions based on your mood and group size</span>
+            </div>
+          </div>
+        </div>
+        <div class="empty-actions">
+          <button class="btn btn-primary" data-view="add">Add your first game</button>
+          <button class="btn btn-secondary" id="empty-bgg-import-btn">Import from BGG</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Add Game View -->
+    <section id="view-add" class="view">
+      <div class="add-view-inner">
+        <div class="page-header">
+          <h1>Add a Game</h1>
+          <p>Search BoardGameGeek to auto-fill, or enter details manually.</p>
+        </div>
+
+        <!-- BGG Search -->
+        <div class="bgg-search-bar" id="bgg-search-bar">
+          <div class="bgg-search-input-wrap">
+            <input type="text" id="bgg-search-input" class="form-input" placeholder="Search BoardGameGeek…" autocomplete="off" aria-label="Search BGG">
+            <div class="bgg-search-results" id="bgg-search-results" style="display:none"></div>
+          </div>
+        </div>
+
+        <form id="manual-form" class="game-form">
+
+          <fieldset class="form-section">
+            <legend class="form-section-legend">Basic Info</legend>
+            <div class="form-grid">
+              <div class="form-group full-width">
+                <label for="m-name">Game Name *</label>
+                <input type="text" id="m-name" name="name" required placeholder="e.g. Ticket to Ride" autocomplete="off" />
+                <span class="field-error" id="err-name"></span>
+              </div>
+              <div class="form-group">
+                <label for="m-status">Status</label>
+                <select id="m-status" name="status" class="form-input">
+                  <option value="owned">Owned</option>
+                  <option value="wishlist">Wishlist</option>
+                  <option value="sold">Sold</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="m-year">Year Published</label>
+                <input type="number" id="m-year" name="year_published" placeholder="2004" min="1800" max="2099" autocomplete="off" />
+              </div>
+              <div class="form-group">
+                <label for="m-condition">Condition</label>
+                <select id="m-condition" name="condition" class="form-input">
+                  <option value="">— None —</option>
+                  <option value="New">New</option>
+                  <option value="Good">Good</option>
+                  <option value="Fair">Fair</option>
+                  <option value="Poor">Poor</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="m-edition">Edition / Version</label>
+                <input type="text" id="m-edition" name="edition" class="form-input" placeholder="1st Edition, KS…" autocomplete="off" />
+              </div>
+              <div class="form-group full-width">
+                <label for="m-image-url">Cover Image <span class="hint">(displayed on your game card)</span></label>
+                <div class="image-edit-area">
+                  <div class="image-edit-preview" id="add-image-preview">
+                    <span class="image-edit-empty">No image</span>
+                  </div>
+                  <div class="image-edit-controls">
+                    <input type="url" id="m-image-url" name="image_url" class="form-input" placeholder="Paste image URL…" autocomplete="off" />
+                    <div class="image-edit-row">
+                      <label class="btn btn-secondary btn-sm image-upload-label">
+                        <input type="file" id="add-image-file" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        Upload file
+                      </label>
+                      <button type="button" class="btn btn-ghost btn-sm" id="add-image-remove" style="display:none">Remove</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group full-width">
+                <label for="m-description">Description</label>
+                <textarea id="m-description" name="description" rows="3" placeholder="A brief description of the game…" autocomplete="off"></textarea>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend class="form-section-legend">Players &amp; Time</legend>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="m-min-players">Min Players</label>
+                <input type="number" id="m-min-players" name="min_players" placeholder="2" min="1" max="20" autocomplete="off" />
+              </div>
+              <div class="form-group">
+                <label for="m-max-players">Max Players</label>
+                <input type="number" id="m-max-players" name="max_players" placeholder="5" min="1" autocomplete="off" />
+                <span class="field-error" id="err-max-players"></span>
+              </div>
+              <div class="form-group">
+                <label for="m-min-playtime">Min Playtime (min)</label>
+                <input type="number" id="m-min-playtime" name="min_playtime" placeholder="30" min="1" autocomplete="off" />
+              </div>
+              <div class="form-group">
+                <label for="m-max-playtime">Max Playtime (min)</label>
+                <input type="number" id="m-max-playtime" name="max_playtime" placeholder="90" min="1" autocomplete="off" />
+                <span class="field-error" id="err-max-playtime"></span>
+              </div>
+              <div class="form-group">
+                <label for="m-difficulty">Difficulty (1–5)</label>
+                <input type="number" id="m-difficulty" name="difficulty" placeholder="2.5" min="1" max="5" step="0.1" autocomplete="off" />
+                <span class="field-error" id="err-difficulty"></span>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend class="form-section-legend">Tags &amp; Labels</legend>
+            <div class="form-grid">
+              <div class="form-group full-width">
+                <label for="m-labels">Labels <span class="hint">(comma-separated, e.g. Favourite, Kid-friendly)</span></label>
+                <input type="text" id="m-labels" name="labels_raw" placeholder="Favourite, Solo, Kid-friendly" list="dl-labels" autocomplete="off" />
+              </div>
+              <div class="form-group full-width">
+                <label for="m-categories">Categories <span class="hint">(comma-separated)</span></label>
+                <input type="text" id="m-categories" name="categories_raw" placeholder="Strategy, Card Game" list="dl-categories" autocomplete="off" />
+              </div>
+              <div class="form-group full-width">
+                <label for="m-mechanics">Mechanics <span class="hint">(comma-separated)</span></label>
+                <input type="text" id="m-mechanics" name="mechanics_raw" placeholder="Hand Management, Set Collection" list="dl-mechanics" autocomplete="off" />
+              </div>
+              <div class="form-group full-width">
+                <label for="m-designers">Designers <span class="hint">(comma-separated)</span></label>
+                <input type="text" id="m-designers" name="designers_raw" placeholder="Alan Moon" list="dl-designers" autocomplete="off" />
+              </div>
+              <div class="form-group full-width">
+                <label for="m-publishers">Publishers <span class="hint">(comma-separated)</span></label>
+                <input type="text" id="m-publishers" name="publishers_raw" placeholder="Days of Wonder" list="dl-publishers" autocomplete="off" />
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend class="form-section-legend">Ownership</legend>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="m-purchase-date">Purchase Date</label>
+                <input type="date" id="m-purchase-date" name="purchase_date" class="date-input" autocomplete="off" />
+              </div>
+              <div class="form-group">
+                <label for="m-purchase-price">Purchase Price ($)</label>
+                <input type="number" id="m-purchase-price" name="purchase_price" placeholder="29.99" step="0.01" min="0" autocomplete="off" />
+              </div>
+              <div class="form-group full-width">
+                <label for="m-purchase-location">Purchase Location</label>
+                <input type="text" id="m-purchase-location" name="purchase_location" placeholder="Amazon, local game shop…" autocomplete="off" list="purchase-location-list" />
+                <datalist id="purchase-location-list"></datalist>
+              </div>
+              <div class="form-group full-width">
+                <label for="m-location">Storage Location</label>
+                <div class="input-with-toggle">
+                  <input type="text" id="m-location" name="location" placeholder="Shelf 2, Box A…" autocomplete="off" list="storage-location-list" />
+                  <datalist id="storage-location-list"></datalist>
+                  <label class="inline-toggle">
+                    <input type="checkbox" id="m-show-location" name="show_location">
+                    Show on card
+                  </label>
+                </div>
+              </div>
+              <div id="m-wishlist-fields" style="display:none">
+                <div class="form-group">
+                  <label for="m-priority">Wishlist Priority</label>
+                  <select id="m-priority" name="priority" class="form-input">
+                    <option value="">— None —</option>
+                    <option value="1">★ (1)</option>
+                    <option value="2">★★ (2)</option>
+                    <option value="3">★★★ (3)</option>
+                    <option value="4">★★★★ (4)</option>
+                    <option value="5">★★★★★ (5)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="m-target-price">Target Price ($)</label>
+                  <input type="number" id="m-target-price" name="target_price" class="form-input" placeholder="25.00" step="0.01" min="0" autocomplete="off" />
+                </div>
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add to Collection</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Statistics View -->
+    <section id="view-stats" class="view">
+      <div id="stats-content">
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+          <p>Loading statistics…</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Players Modal -->
+  <div id="players-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="players-modal-title" style="display:none">
+    <div class="modal-backdrop" id="players-modal-backdrop"></div>
+    <div class="modal-container">
+      <div class="modal-inner" id="players-modal-inner"></div>
+    </div>
+  </div>
+
+  <!-- Game Night Modal -->
+  <div id="game-night-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="game-night-title" style="display:none">
+    <div class="modal-backdrop" id="game-night-backdrop"></div>
+    <div class="modal-container">
+      <div class="modal-inner" id="game-night-inner"></div>
+    </div>
+  </div>
+
+  <!-- Game Detail Modal -->
+  <div id="game-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" style="display:none">
+    <div class="modal-backdrop" id="modal-backdrop"></div>
+    <div class="modal-container">
+      <div class="modal-inner" id="modal-inner"></div>
+    </div>
+  </div>
+
+  <!-- Toast notifications -->
+  <div id="toast-container" class="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-content">
+      <button class="footer-link" id="players-btn" title="Manage players">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Players</span>
+      </button>
+      <span class="footer-separator">·</span>
+      <button class="footer-link" id="share-btn" title="Share collection">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        <span>Share</span>
+      </button>
+      <span class="footer-separator">·</span>
+      <button class="footer-link" id="shortcuts-btn" title="Keyboard shortcuts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M10 14h4"/></svg>
+        <span>Shortcuts</span>
+      </button>
+      <span class="footer-separator">·</span>
+      <button class="footer-link" id="theme-toggle-btn" title="Switch to light mode">
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <span>Theme</span>
+      </button>
+      <span class="footer-separator">·</span>
+      <a href="https://github.com/NoIdeaDeveloper/cardboard-v2" class="footer-link" target="_blank" rel="noopener noreferrer" title="GitHub Repository">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.0288 0.0332031C5.49355 0.0332031 0.0288086 5.498203 0.0288086 12.0332C0.0288086 17.4682 3.51465 21.9432 7.96465 23.3682C8.46465 23.4682 8.66465 23.0682 8.66465 22.8332C8.66465 22.5332 8.64465 21.6332 8.64465 20.6682C5.96465 21.1332 5.26465 19.6682 5.01465 19.0332C4.91465 18.6332 4.31465 17.4682 3.76465 17.1682C3.31465 16.9682 2.71465 16.2682 3.71465 16.2332C4.66465 16.2182 5.36465 17.6682 5.56465 18.0682C6.66465 19.7682 8.31465 19.2332 9.01465 18.8332C9.11465 18.0332 9.36465 17.4682 9.66465 16.8332C6.96465 16.5332 4.31465 15.4682 4.31465 11.3332C4.31465 9.8332 4.76465 8.6682 5.56465 7.8332C5.46465 7.4682 5.01465 6.2332 5.71465 4.5332C5.71465 4.5332 6.71465 3.9682 8.66465 5.6332C9.66465 5.2332 10.7147 5.0332 11.6647 5.0332C13.0147 5.0332 14.3647 5.2332 15.3647 5.6332C17.6647 3.9332 18.6647 4.5332 18.6647 4.5332C19.6647 6.2332 19.0147 7.4682 18.8647 7.8332C19.7647 8.6682 20.2647 9.8332 20.2647 11.3332C20.2647 15.4682 17.2647 16.5332 15.0147 16.8332C15.3647 17.4682 15.6647 18.0332 15.6647 18.8332C16.7647 19.2332 18.6647 19.7682 18.6647 19.7682C19.9647 21.2332 20.0147 23.0332 20.0147 23.4332C20.0147 23.8332 20.4147 24.1682 20.8647 24.1682C21.3647 24.1682 21.7647 23.8332 21.7647 23.4332C21.7647 23.0332 21.6647 21.2332 21.6647 19.7682C21.6647 19.7682 22.7647 18.8332 24.0147 16.8332C24.0147 15.4682 24.0147 13.0332 24.0147 10.0332C24.0147 5.498203 19.5647 0.0332031 12.0288 0.0332031Z"/></svg>
+        <span>GitHub</span>
+      </a>
+      <span class="footer-separator">·</span>
+      <a href="https://github.com/NoIdeaDeveloper/cardboard-v2/issues" class="footer-link" target="_blank" rel="noopener noreferrer" title="Report a Bug">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.5 2.75134C10.5 2.33713 10.1642 2.00134 9.75 2.00134C9.33579 2.00134 9 2.33713 9 2.75134V3.50345C9 4.13591 9.19571 4.72266 9.52988 5.20644C8.13703 5.68546 7.11506 6.96179 7.00909 8.49031H6.76245L6.75315 8.49029C5.51052 8.48515 4.50733 7.47364 4.51247 6.23101L4.51861 4.74541C4.52032 4.3312 4.18593 3.99403 3.77172 3.99232C3.35751 3.9906 3.02034 4.325 3.01863 4.73921L3.01248 6.22481C3.00392 8.29586 4.6759 9.98171 6.74695 9.99027L6.76245 9.99031H7V11.5H2.75C2.33579 11.5 2 11.8358 2 12.25C2 12.6642 2.33579 13 2.75 13H7V14.9923H6.76245L6.74695 14.9923C4.6759 15.0009 3.00392 16.6867 3.01248 18.7578L3.01863 20.2434C3.02034 20.6576 3.35751 20.992 3.77172 20.9903C4.18593 20.9886 4.52032 20.6514 4.51861 20.2372L4.51247 18.7516C4.50733 17.509 5.51052 16.4975 6.75315 16.4923L6.76245 16.4923H7.22633C7.86093 18.5251 9.75816 20.0005 12 20.0005C14.2418 20.0005 16.1391 18.5251 16.7737 16.4923H17.2375L17.2468 16.4923C18.4895 16.4975 19.4927 17.509 19.4875 18.7516L19.4814 20.2372C19.4797 20.6514 19.8141 20.9886 20.2283 20.9903C20.6425 20.992 20.9797 20.6576 20.9814 20.2434L20.9875 18.7578C20.9961 16.6867 19.3241 15.0009 17.253 14.9923L17.2375 14.9923H17V13H21.2514C21.6656 13 22.0014 12.6642 22.0014 12.25C22.0014 11.8358 21.6656 11.5 21.2514 11.5H17V9.99031H17.2375L17.253 9.99027C19.3241 9.98171 20.9961 8.29586 20.9875 6.2248L20.9814 4.73921C20.9797 4.325 20.6425 3.9906 20.2283 3.99232C19.8141 3.99403 19.4797 4.3312 19.4814 4.74541L19.4875 6.23101C19.4927 7.47364 18.4895 8.48515 17.2468 8.49029L17.2375 8.49031H16.9909C16.8849 6.96179 15.863 5.68546 14.4701 5.20644C14.8043 4.72267 15 4.13592 15 3.50345V2.75134C15 2.33713 14.6642 2.00134 14.25 2.00134C13.8358 2.00134 13.5 2.33713 13.5 2.75134V3.50345C13.5 4.33188 12.8284 5.00345 12 5.00345C11.1716 5.00345 10.5 4.33188 10.5 3.50345V2.75134ZM8.5 8.75348C8.5 7.51084 9.50736 6.50348 10.75 6.50348H13.25C14.4926 6.50348 15.5 7.51084 15.5 8.75348V15.0005C15.5 16.9335 13.933 18.5005 12 18.5005C10.067 18.5005 8.5 16.9335 8.5 15.0005V8.75348Z" fill="currentColor"/></svg>
+        <span>Report Bug</span>
+      </a>
+      <span class="footer-separator">·</span>
+      <button class="footer-link" id="retake-tour-btn" title="Retake feature tour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 12l-2-2 2-2"/><path d="M7 10h8a4 4 0 0 1 0 8H7"/></svg>
+        <span>Tour</span>
+      </button>
+    </div>
+  </footer>
+
+  <script src="js/shared-utils.js"></script>
+  <script src="js/theme.js"></script>
+  <script src="js/ui-helpers.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <!-- Tag autocomplete datalists (populated by buildDataLists() in app.js) -->
+  <datalist id="dl-labels"></datalist>
+  <datalist id="dl-categories"></datalist>
+  <datalist id="dl-mechanics"></datalist>
+  <datalist id="dl-designers"></datalist>
+  <datalist id="dl-publishers"></datalist>
+
+  <!-- Mobile bottom nav (shown at ≤480px) -->
+  <nav class="bottom-nav" aria-label="Main navigation">
+    <button class="bottom-nav-btn active" data-view="collection" aria-label="Collection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h6v6h-6z"/></svg>
+      <span>Collection</span>
+    </button>
+    <button class="bottom-nav-btn" data-view="add" aria-label="Add Game">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      <span>Add</span>
+    </button>
+    <button class="bottom-nav-btn" data-view="stats" aria-label="Statistics">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span>Stats</span>
+    </button>
+  </nav>
+
+  <!-- Tour overlay -->
+  <div id="tour-overlay" class="tour-overlay" style="display:none" aria-hidden="true"></div>
+  <div id="tour-tooltip" class="tour-tooltip" style="display:none" role="dialog" aria-modal="true" aria-labelledby="tour-tooltip-text"></div>
+
+  <script src="js/confetti.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

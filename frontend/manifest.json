@@ -1,0 +1,21 @@
+{
+  "name": "Cardboard",
+  "short_name": "Cardboard",
+  "description": "Board game collection manager",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "icons": [
+    {
+      "src": "/cardboard-icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/cardboard-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
