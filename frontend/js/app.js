@@ -1956,53 +1956,38 @@
     await renderPlayers();
   }
 
-  // ===== Shortcuts Overlay =====
+  // ===== Shortcuts Modal =====
   function bindShortcutsOverlay() {
     const btn = document.getElementById('shortcuts-btn');
     if (!btn) return;
 
     const SHORTCUTS = [
-      { key: 'N', desc: 'Add a new game' },
-      { key: 'S', desc: 'Focus the search bar' },
-      { key: 'E', desc: 'Edit hovered or open game' },
+      { key: 'N',   desc: 'Add a new game' },
+      { key: 'S',   desc: 'Focus the search bar' },
+      { key: 'E',   desc: 'Edit hovered or open game' },
       { key: 'Esc', desc: 'Close modal or overlay' },
     ];
 
     btn.addEventListener('click', () => {
-      const overlay = document.createElement('div');
-      overlay.className = 'shortcuts-overlay';
-      overlay.innerHTML = `
-        <div class="shortcuts-panel">
-          <div class="shortcuts-header">
-            <span class="shortcuts-title">Keyboard Shortcuts</span>
-            <button class="shortcuts-close" aria-label="Close">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
-          <ul class="shortcuts-list">
-            ${SHORTCUTS.map(s => `
-              <li class="shortcuts-row">
-                <kbd class="kbd">${escapeHtml(s.key)}</kbd>
-                <span class="shortcuts-desc">${escapeHtml(s.desc)}</span>
-              </li>`).join('')}
-          </ul>
-        </div>`;
+      const el = document.createElement('div');
+      el.className = 'modal-content-panel';
+      el.innerHTML = `
+        <div class="modal-panel-header">
+          <h2>Keyboard Shortcuts</h2>
+          <button class="modal-close" id="shortcuts-modal-close" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <ul class="shortcuts-list">
+          ${SHORTCUTS.map(s => `
+            <li class="shortcuts-row">
+              <kbd class="kbd">${escapeHtml(s.key)}</kbd>
+              <span class="shortcuts-desc">${escapeHtml(s.desc)}</span>
+            </li>`).join('')}
+        </ul>`;
 
-      const prevFocus = document.activeElement;
-      document.body.appendChild(overlay);
-      requestAnimationFrame(() => overlay.classList.add('open'));
-
-      function close() {
-        overlay.classList.remove('open');
-        document.removeEventListener('keydown', onKey);
-        setTimeout(() => { overlay.remove(); if (prevFocus) prevFocus.focus(); }, 180);
-      }
-
-      function onKey(e) { if (e.key === 'Escape') close(); }
-
-      overlay.querySelector('.shortcuts-close').addEventListener('click', close);
-      overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-      document.addEventListener('keydown', onKey);
+      el.querySelector('#shortcuts-modal-close').addEventListener('click', closeModal);
+      openModal(el);
     });
   }
 

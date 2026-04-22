@@ -277,55 +277,6 @@ button.footer-link {
 [data-theme="light"] .theme-icon-moon { display: none; }
 
 /* ===== Shortcuts Overlay ===== */
-.shortcuts-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--overlay);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 500;
-  opacity: 0;
-  transition: opacity 0.18s ease;
-}
-.shortcuts-overlay.open { opacity: 1; }
-
-.shortcuts-panel {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 20px 24px 24px;
-  min-width: 300px;
-  max-width: 400px;
-  width: 90%;
-  box-shadow: var(--shadow-lg);
-}
-
-.shortcuts-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.shortcuts-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.shortcuts-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-3);
-  padding: 4px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  transition: color var(--transition);
-}
-.shortcuts-close:hover { color: var(--text); }
-
 .shortcuts-list {
   list-style: none;
   margin: 0;
