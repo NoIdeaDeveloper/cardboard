@@ -66,26 +66,34 @@
 }
 
 [data-theme="light"] {
-  --bg:               #dbd4ca;
-  --bg-2:             #cec7bc;
-  --bg-3:             #c1baad;
-  --bg-4:             #b5ac9e;
-  --border:           rgba(100,70,30,0.22);
-  --border-hover:     rgba(100,70,30,0.45);
-  --text:             #1a110a;
-  --text-2:           #352416;
-  --text-3:           #5e4530;
-  --text-muted:       #5e4530;
-  --shadow:           0 4px 24px rgba(0,0,0,0.14);
-  --shadow-lg:        0 8px 48px rgba(0,0,0,0.22);
-  --accent-glow:      rgba(201,168,76,0.18);
-  --danger-bg:        rgba(224,92,92,0.12);
-  --success-bg:       rgba(106,181,114,0.12);
-  --bg-glass:         rgba(219,212,202,0.94);
+  --bg:               #eaeaee;
+  --bg-2:             #dfdfe4;
+  --bg-3:             #d3d4d9;
+  --bg-4:             #c7c8ce;
+  --border:           rgba(0,0,0,0.09);
+  --border-hover:     rgba(0,0,0,0.20);
+  --text:             #18181c;
+  --text-2:           #3c3c42;
+  --text-3:           #6a6a72;
+  --text-muted:       #6a6a72;
+  --shadow:           0 4px 24px rgba(0,0,0,0.10);
+  --shadow-lg:        0 8px 48px rgba(0,0,0,0.16);
+  --accent-glow:      rgba(201,168,76,0.20);
+  --danger-bg:        rgba(224,92,92,0.10);
+  --success-bg:       rgba(106,181,114,0.10);
+  --bg-glass:         rgba(234,234,238,0.96);
   --overlay:          rgba(0,0,0,0.55);
   --overlay-sm:       rgba(0,0,0,0.35);
-  --img-gradient:     rgba(219,212,202,0);
-  --img-gradient-end: rgba(0,0,0,0.50);
+  --img-gradient:     rgba(234,234,238,0);
+  --img-gradient-end: rgba(0,0,0,0.45);
+}
+
+/* ===== Theme transition animation ===== */
+/* View Transitions API (Chrome / Edge) — smooth cross-fade on theme toggle */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 380ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 html { font-size: 16px; }

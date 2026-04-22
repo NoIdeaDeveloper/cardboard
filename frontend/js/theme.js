@@ -64,9 +64,26 @@ function bindThemeToggle() {
   update();
   btn.addEventListener('click', () => {
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-    applyTheme(!isLight);
-    localStorage.setItem(THEME_KEY, !isLight ? 'light' : 'dark');
-    localStorage.setItem(THEME_SET_KEY, '1'); // mark as manual
-    update();
+    const goLight = !isLight;
+
+    const doApply = () => { applyTheme(goLight); update(); };
+
+    if (document.startViewTransition) {
+      // View Transitions API — native cross-fade (Chrome / Edge)
+      document.startViewTransition(doApply);
+    } else {
+      // Fallback for Safari / Firefox — fade body out, swap, fade back in
+      const body = document.body;
+      body.style.transition = 'opacity 180ms ease';
+      body.style.opacity = '0.01';
+      setTimeout(() => {
+        doApply();
+        body.style.opacity = '';
+        setTimeout(() => { body.style.transition = ''; }, 200);
+      }, 180);
+    }
+
+    localStorage.setItem(THEME_KEY, goLight ? 'light' : 'dark');
+    localStorage.setItem(THEME_SET_KEY, '1');
   });
 }
