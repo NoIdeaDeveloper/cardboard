@@ -113,11 +113,11 @@ Set via environment variables (or `.env` for Docker):
 
 | Variable | Default | Description |
 |---|---|---|
-| `PORT` | `8000` | Host port |
+| `PORT` | `8000` | Host port the container is mapped to |
 | `DATA_PATH` | `./data` | Host path for the data bind mount |
-| `DATABASE_URL` | `sqlite:////app/data/cardboard.db` | SQLAlchemy connection string |
 | `ALLOWED_ORIGINS` | `*` | CORS origins (set to your domain in production) |
 | `LOG_LEVEL` | `INFO` | Python log level |
+| `DATABASE_URL` | `sqlite:////app/data/cardboard.db` | SQLAlchemy connection string — only needed if using PostgreSQL or a custom path |
 
 ## Backups
 

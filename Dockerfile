@@ -2,7 +2,9 @@ FROM python:3.12.9-slim
 
 # Prevent Python from buffering stdout/stderr and writing .pyc files
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    DATABASE_URL=sqlite:////app/data/cardboard.db \
+    FRONTEND_PATH=/app/frontend
 
 WORKDIR /app
 

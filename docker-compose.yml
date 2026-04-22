@@ -13,8 +13,6 @@ services:
       # See README for details.
       - ${DATA_PATH:-./data}:/app/data
     environment:
-      - DATABASE_URL=sqlite:////app/data/cardboard.db
-      - FRONTEND_PATH=/app/frontend
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
     logging:
