@@ -803,16 +803,20 @@
 
     container.innerHTML = '';
 
-    if (state.games.length === 0) {
+    // Check if this is a truly empty collection (all tab, no games) vs an empty filtered tab
+    const isTrulyEmpty = state.statusFilter === 'all' && state.games.length === 0 && !hasActiveFilters() && !state.search;
+    const isEmptyFilteredTab = state.games.length === 0 && !isTrulyEmpty;
+
+    if (isTrulyEmpty) {
       emptyState.style.display = 'block';
       document.getElementById('recently-played-shelf').style.display = 'none';
       return;
     }
 
     emptyState.style.display = 'none';
-    renderRecentlyPlayedShelf();
 
-    if (filtered.length === 0) {
+    if (isEmptyFilteredTab) {
+      // Handle empty filtered tabs (wishlist, owned, sold with no games) or active filters with no results
       const filtersActive = hasActiveFilters();
 
       // Auto-navigate to Add view when searching for a game not in collection
@@ -831,6 +835,15 @@
         return;
       }
 
+      // Build tab-specific empty message
+      let emptyMessage = 'No games match your filters.';
+      if (!filtersActive && !state.search) {
+        // This is an empty status tab (wishlist, owned, sold)
+        const tabLabels = { owned: 'owned', wishlist: 'wishlist', sold: 'sold' };
+        const tabName = tabLabels[state.statusFilter] || state.statusFilter;
+        emptyMessage = `No ${tabName} games yet.`;
+      }
+
       const actionBtn = filtersActive
         ? `<button class="btn btn-secondary btn-sm" id="no-results-clear-filters">Clear filters</button>`
         : '';
@@ -846,14 +859,17 @@
           <rect x="153" y="40" width="16" height="42" rx="2" fill="var(--accent)" opacity="0.18"/>
           <rect x="173" y="58" width="20" height="24" rx="2" fill="var(--bg-4)" opacity="0.5"/>
         </svg>
-        <p class="empty-search-text">No games match your filters.</p>
+        <p class="empty-search-text">${escapeHtml(emptyMessage)}</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">${actionBtn}</div>
       </div>`;
       document.getElementById('no-results-clear-filters')?.addEventListener('click', () => {
         document.getElementById('filter-clear-all')?.click();
       });
+      renderRecentlyPlayedShelf();
       return;
     }
+
+    renderRecentlyPlayedShelf();
 
     // Wishlist value banner
     const existingBanner = document.querySelector('.wishlist-banner');
