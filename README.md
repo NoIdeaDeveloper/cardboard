@@ -109,6 +109,7 @@ Set via environment variables (or `.env` for Docker):
 | `ALLOWED_ORIGINS` | `*` | CORS origins (set to your domain in production) |
 | `LOG_LEVEL` | `INFO` | Python log level |
 | `DATABASE_URL` | `sqlite:////app/data/cardboard.db` | SQLAlchemy connection string — only needed if using PostgreSQL or a custom path |
+| `FRONTEND_PATH` | `/app/frontend` | Path to the frontend assets — only needed if running the backend outside of Docker |
 
 ## Backups
 
