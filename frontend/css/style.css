@@ -2972,7 +2972,6 @@ input[type="date"] { color-scheme: dark; }
 }
 
 /* ===== Milestones Section ===== */
-.milestones-section { margin-top: 32px; }
 
 .milestones-empty {
   color: var(--text-3);
@@ -3024,6 +3023,7 @@ input[type="date"] { color-scheme: dark; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 14px;
 }
 .stats-section-header .stats-section-title {

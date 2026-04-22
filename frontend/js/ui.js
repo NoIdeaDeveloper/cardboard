@@ -1887,7 +1887,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
     ['show_top_players',       'Player Leaderboard', 'top_players'],
     ['show_recently_played',   'Recently Played',    'recently_played'],
     ['show_recently_added',    'Recently Added',     'recently_added'],
-    ['show_ratings',           'Rating Distribution','ratings'],
+    ['show_ratings',           'Ratings',            'ratings'],
     ['show_labels',            'Labels',             'labels'],
     ['show_added_by_month',    'Added by Month',     'added_by_month'],
     ['show_sessions_by_month', 'Sessions by Month',  'sessions_by_month'],
@@ -2733,9 +2733,9 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
       <div class="stats-export-group">
         <span class="stats-export-label">Import from BGG</span>
         <div class="stats-export-btns">
-          <button class="btn btn-secondary btn-sm" id="stats-import-bgg">Collection XML</button>
+          <button class="btn btn-secondary btn-sm" id="stats-import-bgg" title="Import your BGG collection. On BGG go to your profile → Collection → Export → Export Collection as XML.">Collection XML</button>
           <input type="file" id="stats-import-bgg-file" accept=".xml" style="display:none" aria-hidden="true">
-          <button class="btn btn-secondary btn-sm" id="stats-import-bgg-plays">Plays XML</button>
+          <button class="btn btn-secondary btn-sm" id="stats-import-bgg-plays" title="Import play history from BGG. On BGG go to your profile → Plays → Export Plays as XML.">Plays XML</button>
           <input type="file" id="stats-import-bgg-plays-file" accept=".xml" style="display:none" aria-hidden="true">
         </div>
       </div>
@@ -2816,9 +2816,15 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
     // Checkbox visibility toggle
     row.querySelector('input').addEventListener('change', () => {
       const prefKey = row.querySelector('input').dataset.pref;
-      currentPrefs = { ...currentPrefs, [prefKey]: row.querySelector('input').checked };
+      const checked = row.querySelector('input').checked;
+      currentPrefs = { ...currentPrefs, [prefKey]: checked };
       const section = sectionsEl.querySelector(`[data-section="${row.dataset.key}"]`);
-      if (section) section.style.display = row.querySelector('input').checked ? '' : 'none';
+      if (section) section.style.display = checked ? '' : 'none';
+      // rating_delta lives inside the ratings slot — keep it in sync
+      if (row.dataset.key === 'ratings') {
+        const deltaSection = sectionsEl.querySelector('[data-section="rating_delta"]');
+        if (deltaSection) deltaSection.style.display = checked ? '' : 'none';
+      }
       if (onPrefsChange) onPrefsChange(currentPrefs);
     });
 
