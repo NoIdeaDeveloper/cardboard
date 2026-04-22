@@ -43,7 +43,7 @@ docker compose pull && docker compose up -d
 A pre-built image is published to the GitHub Container Registry on every push to `main`:
 
 ```
-ghcr.io/noidea developer/cardboard:latest
+ghcr.io/noideadeveloper/cardboard:latest
 ```
 
 Pull and run without cloning the repo:
@@ -56,13 +56,13 @@ docker run -d \
   -v /path/to/data:/app/data \
   -e DATABASE_URL=sqlite:////app/data/cardboard.db \
   -e FRONTEND_PATH=/app/frontend \
-  ghcr.io/noidea developer/cardboard:latest
+  ghcr.io/noideadeveloper/cardboard:latest
 ```
 
 **Update:**
 
 ```bash
-docker pull ghcr.io/noidea developer/cardboard:latest
+docker pull ghcr.io/noideadeveloper/cardboard:latest
 docker stop cardboard && docker rm cardboard
 # re-run the docker run command above
 ```
@@ -75,7 +75,7 @@ docker stop cardboard && docker rm cardboard
 | Field | Value |
 |---|---|
 | Name | `cardboard` |
-| Repository | `ghcr.io/noidea developer/cardboard:latest` |
+| Repository | `ghcr.io/noideadeveloper/cardboard:latest` |
 | Network Type | `Bridge` |
 | Port (host → container) | `8000 → 8000` |
 | Path (host → container) | `/mnt/user/appdata/cardboard → /app/data` |
