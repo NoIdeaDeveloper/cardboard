@@ -1543,6 +1543,7 @@ async def import_bgg_plays(file: UploadFile = File(...), db: Session = Depends(g
             results["errors"].append(f"Skipped '{row_name}': {type(exc).__name__}")
             logger.debug("BGG plays import row error for '%s': %s", row_name, exc)
 
+    db.flush()
     for gid in affected_game_ids:
         _sync_last_played(gid, db, commit=False)
     try:
