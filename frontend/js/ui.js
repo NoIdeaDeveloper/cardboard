@@ -1689,14 +1689,32 @@ function buildAddedByMonthHtml(games, includeWishlist) {
         </div>`).join('');
 }
 
+// ── Stats section info-popover helper ────────────────────────────────────────
+// Returns the header row (title + ⓘ button) and the hidden popover as HTML.
+// Used by every stats section that needs an expandable explanation panel.
+const _INFO_BTN_SVG = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15" aria-hidden="true"><circle cx="10" cy="10" r="8.5"/><path d="M9.5 9.5h.5a.5.5 0 0 1 .5.5v3" stroke-linecap="round"/><circle cx="10" cy="6.5" r=".6" fill="currentColor" stroke="none"/></svg>`;
+
+function _sectionInfoHeader(titleHtml, ariaLabel, innerHtml) {
+  return `<div class="health-header">
+    <h3 class="stats-section-title" style="margin:0">${titleHtml}</h3>
+    <button class="health-info-btn" aria-label="${ariaLabel}" aria-expanded="false">${_INFO_BTN_SVG}</button>
+  </div>
+  <div class="health-info-popover" hidden>
+    <div class="health-info-popover-inner">${innerHtml}</div>
+  </div>`;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function buildMilestonesSection(milestones, onGameClick, onClear) {
   const el = document.createElement('div');
   el.className = 'stats-section milestones-section';
 
-  const title = document.createElement('h3');
-  title.className = 'stats-section-title';
-  title.textContent = 'Milestones';
-  el.appendChild(title);
+  const _mFrag = document.createRange().createContextualFragment(
+    _sectionInfoHeader('Milestones', 'About Milestones',
+      '<p class="health-info-intro">Milestones are earned automatically when a single game hits a play-count or playtime threshold (10, 25, or 50 plays; 10, 25, or 50 hours played). The 30 most-recent badges are shown here. Click any badge to open that game.</p>'
+    )
+  );
+  el.appendChild(_mFrag);
 
   if (!Array.isArray(milestones) || !milestones.length) {
     const empty = document.createElement('p');
@@ -1753,10 +1771,12 @@ function buildCollectionValueSection(collectionValue, visible) {
   el.dataset.section = 'collection_value';
   if (!visible) el.style.display = 'none';
 
-  const title = document.createElement('h3');
-  title.className = 'stats-section-title';
-  title.textContent = 'Collection Value';
-  el.appendChild(title);
+  const _cvFrag = document.createRange().createContextualFragment(
+    _sectionInfoHeader('Collection Value', 'About Collection Value',
+      '<p class="health-info-intro">Totals are calculated from purchase prices you\'ve entered on each game. <em>Best Value</em> ranks games by cost per play session; <em>Best Value by Time</em> ranks by cost per hour. Games without a purchase price are excluded from all totals.</p>'
+    )
+  );
+  el.appendChild(_cvFrag);
 
   const hasData = collectionValue && collectionValue.owned_total != null;
 
@@ -2188,7 +2208,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   const _maxDelta = Math.max(..._deltaGames.map(g => Math.abs(g.delta)), 1);
   const ratingDeltaHtml = _deltaGames.length >= 3 ? `
     <div class="stats-section" data-section="rating_delta">
-      <h3 class="stats-section-title">Your Taste vs The Community</h3>
+      ${_sectionInfoHeader('Your Taste vs The Community', 'About Your Taste vs The Community', '<p class="health-info-intro">Compares your personal ratings against the BoardGameGeek community average. A positive bar means you enjoy a game more than the crowd; negative means less. Only games with both a personal rating and a BGG rating appear here.</p>')}
       <div class="rating-delta-chart">
         ${_deltaGames.map(g => {
           const barPct = Math.round(Math.abs(g.delta) / _maxDelta * 46);
@@ -2209,7 +2229,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   // Most played
   const mostPlayedHtml = stats.most_played.length ? `
     <div class="stats-section" data-section="most_played"${!currentPrefs.show_most_played ? ' style="display:none"' : ''}>
-      <h3 class="stats-section-title">Most Played</h3>
+      ${_sectionInfoHeader('Most Played', 'About Most Played', '<p class="health-info-intro">Games ranked by total logged play sessions. Only sessions with a recorded date count toward the total.</p>')}
       <div class="most-played-list">
         ${stats.most_played.map((entry, i) => {
           const maxCount = stats.most_played[0].count;
@@ -2231,7 +2251,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   const maxRating = Math.max(...ratingEntries.map(([, v]) => v), 1);
   const ratingsHtml = `
     <div class="stats-section" data-section="ratings"${!currentPrefs.show_ratings ? ' style="display:none"' : ''}>
-      <h3 class="stats-section-title">Rating Distribution</h3>
+      ${_sectionInfoHeader('Rating Distribution', 'About Rating Distribution', '<p class="health-info-intro">A breakdown of your personal ratings grouped into buckets. Unrated games are not included. A healthy collection tends to have ratings clustered in the 6–9 range.</p>')}
       <div class="stat-bar-chart">
         ${ratingEntries.map(([bucket, count]) => `<div class="stat-bar-row" data-bucket="${escapeHtml(bucket)}" data-count="${count}">
           <span class="stat-bar-label">${escapeHtml(bucket)}</span>
@@ -2246,7 +2266,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   const maxLabel = Math.max(...labelEntries.map(([, v]) => v), 1);
   const labelsHtml = labelEntries.length ? `
     <div class="stats-section" data-section="labels"${!currentPrefs.show_labels ? ' style="display:none"' : ''}>
-      <h3 class="stats-section-title">Labels</h3>
+      ${_sectionInfoHeader('Labels', 'About Labels', '<p class="health-info-intro">How your games are distributed across your custom labels. Up to 10 most-used labels are shown.</p>')}
       <div class="stat-bar-chart">
         ${labelEntries.map(([label, count]) => `<div class="stat-bar-row">
           <span class="stat-bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
@@ -2262,10 +2282,14 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
     <div class="stats-section" data-section="added_by_month"${!currentPrefs.show_added_by_month ? ' style="display:none"' : ''}>
       <div class="stats-section-header">
         <h3 class="stats-section-title">Added by Month</h3>
-        <label class="stats-section-inline-toggle">
+        <button class="health-info-btn" aria-label="About Added by Month" aria-expanded="false">${_INFO_BTN_SVG}</button>
+        <label class="stats-section-inline-toggle" style="margin-left:auto">
           <input type="checkbox" id="added-wishlist-toggle"${addedIncludeWishlist ? ' checked' : ''}>
           Include wishlist
         </label>
+      </div>
+      <div class="health-info-popover" hidden>
+        <div class="health-info-popover-inner"><p class="health-info-intro">How many games you've added to your collection each calendar month. Toggle the checkbox to include or exclude wishlist games.</p></div>
       </div>
       <div class="stat-bar-chart" id="added-by-month-chart">
         ${buildAddedByMonthHtml(games, addedIncludeWishlist)}
@@ -2276,7 +2300,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   const sessionsMax = Math.max(...stats.sessions_by_month.map(e => e.count), 1);
   const sessionsByMonthHtml = `
     <div class="stats-section" data-section="sessions_by_month"${!currentPrefs.show_sessions_by_month ? ' style="display:none"' : ''}>
-      <h3 class="stats-section-title">Sessions by Month</h3>
+      ${_sectionInfoHeader('Sessions by Month', 'About Sessions by Month', '<p class="health-info-intro">Play sessions logged per calendar month. Click any bar to see which games were played that month.</p>')}
       <div class="stat-bar-chart">
         ${stats.sessions_by_month.map(entry => `<div class="stat-bar-row" data-month="${escapeHtml(entry.month)}" data-type="sessions" data-count="${entry.count}" data-game-ids='${JSON.stringify(entry.game_ids || [])}' data-tooltip="${pluralize(entry.count, 'session')}">
           <span class="stat-bar-label">${escapeHtml(entry.month)}</span>
@@ -2289,7 +2313,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   // Recently played (last 10 sessions)
   const recentSessionsHtml = stats.recent_sessions.length ? `
     <div class="stats-section" data-section="recently_played"${!currentPrefs.show_recently_played ? ' style="display:none"' : ''}>
-      <h3 class="stats-section-title">Recently Played</h3>
+      ${_sectionInfoHeader('Recently Played', 'About Recently Played', '<p class="health-info-intro">Your 10 most recent logged play sessions.</p>')}
       <div class="recent-sessions-list">
         ${stats.recent_sessions.map(s => `
           <div class="recent-session-item" data-game-id="${s.game_id}">
@@ -2311,7 +2335,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
 
   const recentlyAddedHtml = recentlyAdded.length ? `
     <div class="stats-section" data-section="recently_added"${!currentPrefs.show_recently_added ? ' style="display:none"' : ''}>
-      <h3 class="stats-section-title">Recently Added</h3>
+      ${_sectionInfoHeader('Recently Added', 'About Recently Added', '<p class="health-info-intro">The 5 most recently added games, sorted by date added.</p>')}
       <div class="insight-game-list">
         ${recentlyAdded.map(g => `
           <div class="insight-game-row" data-game-id="${g.id}">
@@ -2333,7 +2357,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   };
   const neverPlayedHtml = `
     <div class="stats-section" data-section="never_played"${!currentPrefs.show_never_played ? ' style="display:none"' : ''}>
-      <h3 class="stats-section-title">Shelf of Shame (${neverPlayed.length})${neverPlayed.length > 0 ? ' <button class="drilldown-title-btn" data-drilldown="never_played" type="button">View all →</button>' : ''}</h3>
+      ${_sectionInfoHeader(`Shelf of Shame (${neverPlayed.length})${neverPlayed.length > 0 ? ' <button class="drilldown-title-btn" data-drilldown="never_played" type="button">View all →</button>' : ''}`, 'About Shelf of Shame', '<p class="health-info-intro">Owned games you\'ve never played, sorted by how long you\'ve had them. Use it as a nudge to finally get them to the table.</p>')}
       <p class="insight-subtext">Owned but never played \u2014 longest owned first</p>
       ${neverPlayed.length
         ? `<div class="insight-game-list">
@@ -2355,7 +2379,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
     .sort((a, b) => a.last_played.localeCompare(b.last_played));
   const dormantHtml = dormantGames.length ? `
     <div class="stats-section" data-section="dormant"${!currentPrefs.show_dormant ? ' style="display:none"' : ''}>
-      <h3 class="stats-section-title">Dormant Games (${dormantGames.length})</h3>
+      ${_sectionInfoHeader(`Dormant Games (${dormantGames.length})`, 'About Dormant Games', '<p class="health-info-intro">Owned games you haven\'t played in over a year. A good prompt to revisit old favourites — or decide it\'s time to pass them on.</p>')}
       <p class="insight-subtext">Owned but not played in over a year</p>
       <div class="insight-game-list">
         ${dormantGames.slice(0, 10).map(g => `
@@ -2384,7 +2408,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   const maxMechanic = topMechanics[0]?.[1] || 1;
   const topMechanicsHtml = topMechanics.length ? `
     <div class="stats-section" data-section="top_mechanics"${!currentPrefs.show_top_mechanics ? ' style="display:none"' : ''}>
-      <h3 class="stats-section-title">Top Mechanics</h3>
+      ${_sectionInfoHeader('Top Mechanics', 'About Top Mechanics', '<p class="health-info-intro">The game mechanics that appear most often across your owned games. Useful for spotting the styles of play you gravitate towards.</p>')}
       <div class="stat-bar-chart">
         ${topMechanics.map(([name, count]) => `
           <div class="stat-bar-row" data-drilldown="mechanic" data-mechanic-name="${escapeHtml(name)}" title="Filter by ${escapeHtml(name)}">
@@ -2404,7 +2428,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   const topPlayers = stats.top_players || [];
   const topPlayersHtml = topPlayers.length ? `
     <div class="stats-section" data-section="top_players"${currentPrefs.show_top_players === false ? ' style="display:none"' : ''}>
-      <h3 class="stats-section-title">Player Leaderboard</h3>
+      ${_sectionInfoHeader('Player Leaderboard', 'About Player Leaderboard', '<p class="health-info-intro">Players ranked by the number of sessions they\'ve participated in. Win counts and win rates are shown where wins were recorded.</p>')}
       <div class="most-played-list">
         ${topPlayers.map((p, i) => {
           const maxSessions = topPlayers[0].session_count;
@@ -2441,7 +2465,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   const peakDowIdx = dowSessionsByDay.indexOf(Math.max(...dowSessionsByDay));
   const sessionsByDowHtml = (stats.total_sessions > 0) ? `
     <div class="stats-section" data-section="sessions_by_dow"${currentPrefs.show_sessions_by_dow === false ? ' style="display:none"' : ''}>
-      <h3 class="stats-section-title">When Do You Play?</h3>
+      ${_sectionInfoHeader('When Do You Play?', 'About When Do You Play', '<p class="health-info-intro">Sessions broken down by day of the week. Click any bar to see which games were played that day. Your peak day is highlighted in accent colour.</p>')}
       ${maxDow > 0 ? `<p class="stats-dow-peak">You play most on <strong>${DOW_LABELS[peakDowIdx]}s</strong></p>` : ''}
       <div class="stats-dow-chart">
         ${DOW_LABELS.map((label, i) => {
@@ -2513,7 +2537,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
 
     playHeatmapHtml = `
     <div class="stats-section" data-section="play_heatmap"${currentPrefs.show_play_heatmap === false ? ' style="display:none"' : ''}>
-      <h3 class="stats-section-title">Play Activity</h3>
+      ${_sectionInfoHeader('Play Activity', 'About Play Activity', '<p class="health-info-intro">A 52-week calendar heatmap of your play sessions. Darker cells mean more sessions that day. Click any active cell to see which games were played.</p>')}
       <p class="stats-heatmap-meta">${pluralize(totalDays, 'session')} across ${pluralize(activeDays, 'day')} in the past year</p>
       <div class="stats-heatmap-wrap">
         <div class="stats-heatmap-dow-labels">
@@ -2583,7 +2607,11 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
       <div class="stats-section" data-section="goals" id="stats-goals">
         <div class="stats-section-header">
           <div class="stats-section-title">Goals &amp; Challenges</div>
-          <button class="btn btn-secondary btn-sm" id="add-goal-btn">+ Add Goal</button>
+          <button class="health-info-btn" aria-label="About Goals &amp; Challenges" aria-expanded="false">${_INFO_BTN_SVG}</button>
+          <button class="btn btn-secondary btn-sm" id="add-goal-btn" style="margin-left:auto">+ Add Goal</button>
+        </div>
+        <div class="health-info-popover" hidden>
+          <div class="health-info-popover-inner"><p class="health-info-intro">Set personal milestones and track your progress. Goals update automatically as you log plays, rate games, or grow your collection. Completed goals are kept for reference.</p></div>
         </div>
         <div class="goal-cards" id="goal-cards-list">
           ${goalCards}

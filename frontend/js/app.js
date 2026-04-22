@@ -2682,25 +2682,38 @@
       if (firstGame) openQuickLogSession(firstGame);
     });
 
-    // Collection health info popover toggle
-    const healthInfoBtn = statsView.querySelector('.health-info-btn');
-    const healthInfoPopover = statsView.querySelector('.health-info-popover');
-    if (healthInfoBtn && healthInfoPopover) {
-      healthInfoBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const open = !healthInfoPopover.hidden;
-        healthInfoPopover.hidden = open;
-        healthInfoBtn.setAttribute('aria-expanded', String(!open));
-        healthInfoBtn.classList.toggle('active', !open);
-      });
-      document.addEventListener('keydown', function _healthEsc(e) {
-        if (e.key === 'Escape' && !healthInfoPopover.hidden) {
-          healthInfoPopover.hidden = true;
-          healthInfoBtn.setAttribute('aria-expanded', 'false');
-          healthInfoBtn.classList.remove('active');
+    // Stats section info popover toggles (all sections share .health-info-btn pattern)
+    statsView.addEventListener('click', (e) => {
+      const btn = e.target.closest('.health-info-btn');
+      if (!btn) return;
+      e.stopPropagation();
+      // The popover is always the next sibling element after the button's parent (.health-header or .stats-section-header)
+      const parent = btn.parentElement;
+      const popover = parent.nextElementSibling?.classList.contains('health-info-popover')
+        ? parent.nextElementSibling
+        : btn.closest('.stats-section')?.querySelector('.health-info-popover');
+      if (!popover) return;
+      const open = !popover.hidden;
+      // Close any other open popovers in the stats view first
+      statsView.querySelectorAll('.health-info-popover:not([hidden])').forEach(p => {
+        if (p !== popover) {
+          p.hidden = true;
+          p.previousElementSibling?.querySelector('.health-info-btn')?.setAttribute('aria-expanded', 'false');
+          p.previousElementSibling?.querySelector('.health-info-btn')?.classList.remove('active');
         }
       });
-    }
+      popover.hidden = open;
+      btn.setAttribute('aria-expanded', String(!open));
+      btn.classList.toggle('active', !open);
+    });
+    document.addEventListener('keydown', function _sectionInfoEsc(e) {
+      if (e.key !== 'Escape') return;
+      statsView.querySelectorAll('.health-info-popover:not([hidden])').forEach(popover => {
+        popover.hidden = true;
+        popover.previousElementSibling?.querySelector('.health-info-btn')?.setAttribute('aria-expanded', 'false');
+        popover.previousElementSibling?.querySelector('.health-info-btn')?.classList.remove('active');
+      });
+    });
 
     // Heatmap right-edge fade: remove when scrolled to end
     const heatmapScroll = statsView.querySelector('.stats-heatmap-scroll');
