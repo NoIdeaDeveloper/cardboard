@@ -1,3 +1,4 @@
+import base64
 import certifi
 import csv
 import glob
@@ -32,6 +33,7 @@ from constants import (
     MAX_INSTRUCTIONS_SIZE, ALLOWED_INSTRUCTIONS_EXTENSIONS,
     BGG_IMPORT_MAX_BYTES, BGG_PLAYS_MAX_BYTES, NOTES_MAX_LENGTH,
     CSV_IMPORT_MAX_BYTES, NO_LOCATION_SENTINEL,
+    FRONTEND_PATH,
 )
 
 logger = logging.getLogger("cardboard.games")
@@ -592,6 +594,88 @@ def download_json_backup(background_tasks: BackgroundTasks, db: Session = Depend
         raise
     background_tasks.add_task(os.remove, tmp.name)
     return response
+
+
+@router.get("/export/static-html")
+def export_static_html(db: Session = Depends(get_db)):
+    """
+    Export the collection as a self-contained static HTML page.
+    All game data is embedded as JSON and cached images are embedded as base64 data URLs.
+    Only games with share_hidden=False are included.
+    """
+    # Query all games where share_hidden == False
+    games = db.query(models.Game).filter(models.Game.share_hidden == False).all()
+    
+    # Build game responses with tags populated
+    results = build_game_responses(games, db)
+    
+    # Serialize to JSON
+    games_json = [r.model_dump(mode="json") for r in results]
+    
+    # For each game, handle image embedding and clean up backend-specific fields
+    for game_data in games_json:
+        game_id = game_data.get('id')
+        if game_data.get('image_cached') and game_data.get('image_ext'):
+            image_path = os.path.join(IMAGES_DIR, f"{game_id}{game_data['image_ext']}")
+            if os.path.isfile(image_path):
+                try:
+                    with open(image_path, 'rb') as f:
+                        image_bytes = f.read()
+                    # Determine MIME type from extension
+                    ext = game_data['image_ext'].lower()
+                    mime_map = {
+                        '.jpg': 'image/jpeg',
+                        '.jpeg': 'image/jpeg',
+                        '.png': 'image/png',
+                        '.gif': 'image/gif',
+                        '.webp': 'image/webp',
+                    }
+                    mime_type = mime_map.get(ext, 'image/jpeg')
+                    # Convert to base64
+                    b64_data = base64.b64encode(image_bytes).decode('ascii')
+                    game_data['image_url'] = f"data:{mime_type};base64,{b64_data}"
+                except Exception as e:
+                    logger.warning(f"Failed to read image for game {game_id}: {e}")
+                    # If we can't read the image, image_url stays as-is (None or original URL)
+        # Always remove backend-specific fields from the export
+        game_data.pop('image_cached', None)
+        game_data.pop('image_ext', None)
+        game_data.pop('image_cache_status', None)
+    
+    # Read the share.html template
+    share_html_path = os.path.join(FRONTEND_PATH, "share.html")
+    if not os.path.isfile(share_html_path):
+        raise HTTPException(status_code=500, detail="share.html template not found")
+    
+    with open(share_html_path, 'r', encoding='utf-8') as f:
+        html_content = f.read()
+    
+    # Generate filename with today's date
+    ts = _date.today().strftime("%Y-%m-%d")
+    filename = f"cardboard-collection-{ts}.html"
+    
+    # Inject the JSON payload before </body>
+    json_payload = json.dumps(games_json)
+    # Find the position of </body> and insert before it
+    body_end_pos = html_content.rfind('</body>')
+    if body_end_pos == -1:
+        raise HTTPException(status_code=500, detail="Could not find </body> tag in share.html")
+    
+    # Create the script tag to inject
+    script_tag = f'<script>window.__STATIC_COLLECTION__ = {json_payload};</script>'
+    
+    # Insert the script tag before </body>
+    modified_html = html_content[:body_end_pos] + script_tag + '\n' + html_content[body_end_pos:]
+    
+    # Return as HTML response with download headers
+    return Response(
+        content=modified_html,
+        media_type="text/html",
+        headers={
+            "Content-Disposition": f'attachment; filename="{_safe_header_filename(filename)}"',
+            "Cache-Control": "no-cache",
+        }
+    )
 
 
 RESTORE_MAX_BYTES = 500 * 1024 * 1024  # 500 MB

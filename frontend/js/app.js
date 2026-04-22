@@ -2777,6 +2777,11 @@
       showToast('JSON backup download started…', 'info');
     });
 
+    // Export static HTML page
+    statsView.querySelector('#stats-export-static')?.addEventListener('click', () => {
+      window.location.href = '/api/games/export/static-html';
+    });
+
     // Restore from backup
     const restoreBtn   = statsView.querySelector('#stats-restore-btn');
     const restoreInput = statsView.querySelector('#stats-restore-file');
@@ -3291,7 +3296,7 @@
         </div>
         <div class="share-modal-hero-text">
           <h2>Share Collection</h2>
-          <p>Create read-only links to share your collection with others.</p>
+          <p>Share your collection via live link or download a static HTML file.</p>
         </div>
         <button class="modal-close" id="share-modal-close" aria-label="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -3317,6 +3322,11 @@
               <button class="btn btn-primary" id="share-create-btn">Create Link</button>
             </div>
           </div>
+          <div class="share-export-section">
+            <div class="section-label">Static HTML Export</div>
+            <p class="share-export-desc">Download a self-contained HTML file with your entire collection — no server required. Perfect for sharing offline or via email/cloud storage.</p>
+            <button class="btn btn-secondary" id="share-export-static-btn">Download Static Page</button>
+          </div>
         </div>
         <div id="share-tab-requests" style="display:none">
           <div id="share-requests-list"></div>
@@ -3324,6 +3334,15 @@
       </div>`;
 
     el.querySelector('#share-modal-close').addEventListener('click', closeModal);
+
+    // Static export button in share modal
+    const staticExportBtn = el.querySelector('#share-export-static-btn');
+    if (staticExportBtn) {
+      staticExportBtn.addEventListener('click', () => {
+        window.location.href = '/api/games/export/static-html';
+        closeModal();
+      });
+    }
 
     // Tab switching
     el.querySelectorAll('.share-tab').forEach(tab => {

@@ -103,7 +103,8 @@
   <script>
     // Minimal API for shared view
     const token = new URLSearchParams(location.search).get('token');
-    if (!token) {
+    const staticData = window.__STATIC_COLLECTION__ || null;
+    if (!token && !staticData) {
       document.querySelector('.loading-spinner p').textContent = 'Invalid share link.';
     }
 
@@ -253,7 +254,7 @@
               ${game.target_price ? `<span class="wishlist-target-price">Target: £${game.target_price.toFixed(2)}</span>` : ''}
             </div>
           </div>` : ''}
-          <div class="modal-section want-to-play-section" id="want-to-play-section">
+          ${!staticData ? `<div class="modal-section want-to-play-section" id="want-to-play-section">
             ${localStorage.getItem('wtp_' + token + '_' + game.id) ? '<p class="wtp-already-sent">✓ You already requested this game!</p>' : '<button class="btn btn-secondary" id="want-to-play-btn">🙋 Want to Play</button>'}
             <div id="want-to-play-form" style="display:none">
               <div class="form-group" style="margin-top:8px">
@@ -267,7 +268,7 @@
                 <button class="btn btn-ghost" id="wtp-cancel-btn">Cancel</button>
               </div>
             </div>
-          </div>
+          </div>` : ''}
           ${game.bgg_id ? `
           <div class="modal-section">
             <div class="section-label">Share</div>
@@ -414,7 +415,16 @@
     }
 
     // Load shared collection
-    if (token) {
+    if (staticData) {
+      games = staticData;
+      buildMechanicsFilter();
+      render();
+      const gameParam = new URLSearchParams(location.search).get('game');
+      if (gameParam) {
+        const target = games.find(g => g.id === parseInt(gameParam, 10));
+        if (target) openGameDetail(target);
+      }
+    } else if (token) {
       fetch(`/api/share/${encodeURIComponent(token)}/games`)
         .then(r => {
           if (!r.ok) throw new Error(r.status === 404 ? 'Invalid or expired share link.' : `HTTP ${r.status}`);

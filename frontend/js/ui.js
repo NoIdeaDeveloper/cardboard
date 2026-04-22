@@ -2717,6 +2717,12 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
           <input type="file" id="stats-restore-file" accept=".zip" style="display:none">
         </div>
       </div>
+      <div class="stats-export-group">
+        <span class="stats-export-label">Static Export</span>
+        <div class="stats-export-btns">
+          <button class="btn btn-secondary btn-sm" id="stats-export-static" title="Download self-contained HTML page with all game data">Static HTML Page</button>
+        </div>
+      </div>
     </div>
     <div class="stats-grid" id="stats-sections">
       ${orderedSectionsHtml}

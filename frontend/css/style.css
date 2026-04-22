@@ -4670,6 +4670,17 @@ input[type="date"] { color-scheme: dark; }
   border-top: 1px solid var(--border);
 }
 .share-create-section .section-label { margin-bottom: 8px; }
+.share-export-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.share-export-section .section-label { margin-bottom: 6px; }
+.share-export-desc {
+  font-size: 0.8rem;
+  color: var(--text-3);
+  margin: 0 0 10px;
+}
 .share-create-row {
   display: flex;
   gap: 8px;

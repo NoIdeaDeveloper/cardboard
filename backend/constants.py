@@ -1,3 +1,5 @@
+import os
+
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
@@ -15,3 +17,5 @@ CSV_IMPORT_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 # Sentinel passed as ?location=__none__ to match games with no storage
 # location set (NULL or empty string). Mirrored in frontend/js/app.js.
 NO_LOCATION_SENTINEL = "__none__"
+
+FRONTEND_PATH = os.getenv("FRONTEND_PATH", "/app/frontend")
