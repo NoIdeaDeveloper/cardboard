@@ -133,7 +133,7 @@ function buildGameListItem(game) {
 
   const playtime = formatPlaytime(game.min_playtime, game.max_playtime);
   const players  = formatPlayers(game.min_players, game.max_players);
-  const metaParts = [players, playtime, game.difficulty ? `Difficulty ${game.difficulty.toFixed(1)}` : null].filter(Boolean);
+  const metaParts = [players, playtime, game.difficulty ? `Difficulty ${+game.difficulty.toFixed(2)}` : null].filter(Boolean);
 
   const ratingHtml = game.user_rating
     ? `${renderStars(game.user_rating)}<span class="rating-num">${game.user_rating}</span>`
@@ -313,7 +313,7 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
   let chipsHtml = '';
   if (players)  chipsHtml += `<span class="chip">${escapeHtml(players)}</span>`;
   if (playtime) chipsHtml += `<span class="chip">${escapeHtml(playtime)}</span>`;
-  if (game.difficulty) chipsHtml += `<span class="chip chip-difficulty">${game.difficulty.toFixed(1)} weight</span>`;
+  if (game.difficulty) chipsHtml += `<span class="chip chip-difficulty">${+game.difficulty.toFixed(2)} weight</span>`;
   if (game.year_published) chipsHtml += `<span class="chip">${game.year_published}</span>`;
 
   function tagsBlock(label, items) {
@@ -550,7 +550,7 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
           </div>
           <div class="form-group">
             <label for="edit-difficulty">Difficulty (1–5)</label>
-            <input type="number" id="edit-difficulty" class="form-input" min="1" max="5" step="0.1" value="${game.difficulty || ''}" autocomplete="off">
+            <input type="number" id="edit-difficulty" class="form-input" min="1" max="5" step="0.01" value="${game.difficulty || ''}" autocomplete="off">
             <span class="field-error" id="err-difficulty"></span>
           </div>
           <div class="form-group full-width">

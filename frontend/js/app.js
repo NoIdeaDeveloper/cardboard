@@ -2527,7 +2527,7 @@
                 <div class="game-night-meta">
                   ${s.min_players || s.max_players ? `<span>${formatPlayers(s.min_players, s.max_players)}</span>` : ''}
                   ${s.min_playtime || s.max_playtime ? `<span>${formatPlaytime(s.min_playtime, s.max_playtime)}</span>` : ''}
-                  ${s.difficulty ? `<span>Difficulty ${s.difficulty.toFixed(1)}</span>` : ''}
+                  ${s.difficulty ? `<span>Difficulty ${+s.difficulty.toFixed(2)}</span>` : ''}
                   ${s.user_rating ? `<span>★ ${s.user_rating.toFixed(1)}</span>` : ''}
                 </div>
                 <div class="game-night-reasons">${s.reasons.map(r => `<span class="reason-chip">${escapeHtml(r)}</span>`).join('')}</div>
