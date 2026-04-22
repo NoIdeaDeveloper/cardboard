@@ -695,7 +695,7 @@ async def restore_backup(file: UploadFile = File(...)):
     if not os.path.isabs(db_path):
         db_path = os.path.join("/app", db_path)
 
-    validate_file_extension(file.filename or "", {".zip"})
+    validate_file_extension(file.filename or "", {".zip"}, "Only .zip backup files are allowed")
 
     content = await file.read(RESTORE_MAX_BYTES + 1)
     if len(content) > RESTORE_MAX_BYTES:
