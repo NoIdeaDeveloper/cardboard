@@ -2057,7 +2057,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   const _playedCount = _ownedBase.filter(g => g.last_played).length;
   const _playedPct = _ownedBase.length ? _playedCount / _ownedBase.length : 0;
   const _ratedOwned = _ownedBase.filter(g => g.user_rating);
-  const _avgRatingRaw = _ratedOwned.length ? _ratedOwned.reduce((s, g) => s + g.user_rating, 0) / _ratedOwned.length : 5;
+  const _avgRatingRaw = _ratedOwned.length ? _ratedOwned.reduce((s, g) => s + g.user_rating, 0) / _ratedOwned.length : 0;
   const _ratingScore = _avgRatingRaw / 10;
   const _uniqueMechanics = new Set(_ownedBase.flatMap(g => parseList(g.mechanics))).size;
   const _diversityScore = Math.min(1, _uniqueMechanics / 20);
@@ -2066,7 +2066,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   const _targetOffset = Math.round(_circ * (1 - _healthScore / 100));
   const _healthColor = _healthScore >= 70 ? 'var(--success)' : _healthScore >= 40 ? 'var(--warning)' : 'var(--danger)';
   const _playedPctLabel = Math.round(_playedPct * 100) + '%';
-  const _healthGrade = _healthScore >= 90 ? 'Excellent' : _healthScore >= 70 ? 'Healthy' : _healthScore >= 40 ? 'Developing' : 'Needs Attention';
+  const _healthGrade = _healthScore >= 90 ? 'Excellent' : _healthScore >= 70 ? 'Healthy' : _healthScore >= 40 ? 'Developing' : 'Just Starting';
 
   // Per-factor bar widths (each factor scored 0–100 independently before weighting)
   const _playBarPct   = Math.round(_playedPct * 100);
@@ -2106,7 +2106,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
                 <span class="hb-weight">40% of score</span>
               </div>
               <p class="health-info-factor-desc">Your average personal rating across all rated games, scaled to 0–100. It reflects how much you enjoy the games you own — a high average means a well-curated shelf.</p>
-              <p class="health-info-tip">Tip: Rate the games you've played; unrated games default to 5/10 and drag the score toward the middle.</p>
+              <p class="health-info-tip">Tip: Rate the games you've played — your ratings feed directly into this factor.</p>
             </div>
             <div class="health-info-factor">
               <div class="health-info-factor-header">
@@ -2124,7 +2124,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
               <div class="hrl-item"><span class="hrl-dot" style="background:var(--success)"></span><strong>90–100</strong> Excellent</div>
               <div class="hrl-item"><span class="hrl-dot" style="background:var(--success)"></span><strong>70–89</strong> Healthy</div>
               <div class="hrl-item"><span class="hrl-dot" style="background:var(--warning)"></span><strong>40–69</strong> Developing</div>
-              <div class="hrl-item"><span class="hrl-dot" style="background:var(--danger)"></span><strong>0–39</strong> Needs Attention</div>
+              <div class="hrl-item"><span class="hrl-dot" style="background:var(--danger)"></span><strong>0–39</strong> Just Starting</div>
             </div>
           </div>
         </div>
