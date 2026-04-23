@@ -1146,6 +1146,16 @@
         qlRatingPicker.dataset.value = val;
         qlRatingPicker.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val, 10) <= val));
       });
+      qlRatingPicker.addEventListener('mouseover', e => {
+        const btn = e.target.closest('.star-btn');
+        if (!btn) return;
+        const val = parseInt(btn.dataset.val, 10);
+        qlRatingPicker.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val, 10) <= val));
+      });
+      qlRatingPicker.addEventListener('mouseleave', () => {
+        const saved = parseInt(qlRatingPicker.dataset.value, 10) || 0;
+        qlRatingPicker.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val, 10) <= saved));
+      });
     }
 
     // Solo mode toggle

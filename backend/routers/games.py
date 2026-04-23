@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import and_, asc, case, desc, exists, func, or_
 from sqlalchemy.orm import Session
 
-from database import SessionLocal, get_db
+from database import SessionLocal, get_db, engine
 import models
 import schemas
 from routers.game_images import delete_all_gallery_images
@@ -726,6 +726,11 @@ async def restore_backup(file: UploadFile = File(...)):
 
             # Atomically replace the database
             os.replace(db_tmp, db_path)
+
+            # Invalidate the connection pool so all future requests open fresh
+            # connections against the restored file (old pooled connections still
+            # point to the previous inode via SQLite WAL).
+            engine.dispose()
 
             # Restore media directories (optional — skip missing)
             safe_data_dir = os.path.realpath(data_dir) + os.sep

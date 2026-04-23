@@ -792,6 +792,16 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
       _ratingPicker.dataset.value = val;
       _ratingPicker.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val, 10) <= val));
     });
+    _ratingPicker.addEventListener('mouseover', e => {
+      const btn = e.target.closest('.star-btn');
+      if (!btn) return;
+      const val = parseInt(btn.dataset.val, 10);
+      _ratingPicker.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val, 10) <= val));
+    });
+    _ratingPicker.addEventListener('mouseleave', () => {
+      const saved = parseInt(_ratingPicker.dataset.value, 10) || 0;
+      _ratingPicker.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val, 10) <= saved));
+    });
   }
 
   const sessionSubmitBtn = el.querySelector('#session-submit');
@@ -935,6 +945,16 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
           const val = parseInt(btn.dataset.val, 10);
           seRatingPicker.dataset.value = val;
           seRatingPicker.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val, 10) <= val));
+        });
+        seRatingPicker.addEventListener('mouseover', e => {
+          const btn = e.target.closest('.star-btn');
+          if (!btn) return;
+          const val = parseInt(btn.dataset.val, 10);
+          seRatingPicker.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val, 10) <= val));
+        });
+        seRatingPicker.addEventListener('mouseleave', () => {
+          const saved = parseInt(seRatingPicker.dataset.value, 10) || 0;
+          seRatingPicker.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val, 10) <= saved));
         });
       }
 
