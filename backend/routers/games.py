@@ -248,7 +248,7 @@ def _save_tags(game_id: int, data_dict: dict, db: Session) -> None:
         db.flush()
     except Exception as e:
         logger.error("Failed to save tags for game %d: %s", game_id, str(e))
-        raise HTTPException(status_code=500, detail="Failed to save tags")
+        raise HTTPException(status_code=500, detail="Failed to save tags") from e
 
 
 def _load_tags(games, db: Session) -> None:
