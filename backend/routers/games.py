@@ -600,81 +600,98 @@ def download_json_backup(background_tasks: BackgroundTasks, db: Session = Depend
 def export_static_html(db: Session = Depends(get_db)):
     """
     Export the collection as a self-contained static HTML page.
-    All game data is embedded as JSON and cached images are embedded as base64 data URLs.
+    CSS, shared-utils.js, and game data are all inlined so the file works
+    when opened directly from disk with no server.
     Only games with share_hidden=False are included.
     """
-    # Query all games where share_hidden == False
+    # ── 1. Query games ────────────────────────────────────────────────────────
     games = db.query(models.Game).filter(models.Game.share_hidden == False).all()
-    
-    # Build game responses with tags populated
     results = build_game_responses(games, db)
-    
-    # Serialize to JSON
     games_json = [r.model_dump(mode="json") for r in results]
-    
-    # For each game, handle image embedding and clean up backend-specific fields
+
+    _MIME_MAP = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                 '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp'}
+
     for game_data in games_json:
         game_id = game_data.get('id')
         if game_data.get('image_cached') and game_data.get('image_ext'):
             image_path = os.path.join(IMAGES_DIR, f"{game_id}{game_data['image_ext']}")
             if os.path.isfile(image_path):
                 try:
-                    with open(image_path, 'rb') as f:
-                        image_bytes = f.read()
-                    # Determine MIME type from extension
-                    ext = game_data['image_ext'].lower()
-                    mime_map = {
-                        '.jpg': 'image/jpeg',
-                        '.jpeg': 'image/jpeg',
-                        '.png': 'image/png',
-                        '.gif': 'image/gif',
-                        '.webp': 'image/webp',
-                    }
-                    mime_type = mime_map.get(ext, 'image/jpeg')
-                    # Convert to base64
-                    b64_data = base64.b64encode(image_bytes).decode('ascii')
-                    game_data['image_url'] = f"data:{mime_type};base64,{b64_data}"
-                except Exception as e:
-                    logger.warning(f"Failed to read image for game {game_id}: {e}")
-                    # If we can't read the image, image_url stays as-is (None or original URL)
-        # Always remove backend-specific fields from the export
+                    with open(image_path, 'rb') as fh:
+                        b64 = base64.b64encode(fh.read()).decode('ascii')
+                    mime = _MIME_MAP.get(game_data['image_ext'].lower(), 'image/jpeg')
+                    game_data['image_url'] = f"data:{mime};base64,{b64}"
+                except Exception as exc:
+                    logger.warning("Failed to embed image for game %s: %s", game_id, exc)
         game_data.pop('image_cached', None)
         game_data.pop('image_ext', None)
         game_data.pop('image_cache_status', None)
-    
-    # Read the share.html template
+
+    # ── 2. Read share.html template ───────────────────────────────────────────
     share_html_path = os.path.join(FRONTEND_PATH, "share.html")
     if not os.path.isfile(share_html_path):
         raise HTTPException(status_code=500, detail="share.html template not found")
-    
-    with open(share_html_path, 'r', encoding='utf-8') as f:
-        html_content = f.read()
-    
-    # Generate filename with today's date
+    with open(share_html_path, 'r', encoding='utf-8') as fh:
+        html = fh.read()
+
+    # ── 3. Inline CSS (replace <link href="/css/style.css">) ─────────────────
+    css_path = os.path.join(FRONTEND_PATH, "css", "style.css")
+    if os.path.isfile(css_path):
+        with open(css_path, 'r', encoding='utf-8') as fh:
+            css_content = fh.read()
+        html = html.replace(
+            '<link rel="stylesheet" href="/css/style.css" />',
+            f'<style>\n{css_content}\n</style>',
+            1,
+        )
+
+    # ── 4. Inline shared-utils.js AND inject data variable ───────────────────
+    # The data variable must be defined before the main <script> block that
+    # reads window.__STATIC_COLLECTION__ at line 2 of that block.
+    utils_path = os.path.join(FRONTEND_PATH, "js", "shared-utils.js")
+    json_payload = json.dumps(games_json, separators=(',', ':'))
+    data_assignment = f'window.__STATIC_COLLECTION__ = {json_payload};'
+    if os.path.isfile(utils_path):
+        with open(utils_path, 'r', encoding='utf-8') as fh:
+            utils_content = fh.read()
+        # Replace external script tag with inlined content + data variable
+        inline_block = f'<script>\n{utils_content}\n{data_assignment}\n</script>'
+        html = html.replace('<script src="/js/shared-utils.js"></script>', inline_block, 1)
+    else:
+        # Fallback: inject data variable before the main script block
+        html = html.replace(
+            '<script src="/js/shared-utils.js"></script>',
+            f'<script>{data_assignment}</script>',
+            1,
+        )
+
+    # ── 5. Remove absolute-path references that break offline use ─────────────
+    # Favicon — just drop it; no functional impact
+    html = html.replace('<link rel="icon" type="image/png" href="/cardboard-icon.png" />', '', 1)
+
+    # Logo icon — embed as base64 if available, otherwise remove the <img>
+    icon_path = os.path.join(FRONTEND_PATH, "cardboard-icon.png")
+    if os.path.isfile(icon_path):
+        with open(icon_path, 'rb') as fh:
+            icon_b64 = base64.b64encode(fh.read()).decode('ascii')
+        html = html.replace(
+            'src="/cardboard-icon.png"',
+            f'src="data:image/png;base64,{icon_b64}"',
+        )
+    else:
+        html = html.replace('<img class="logo-icon" src="/cardboard-icon.png" alt="Cardboard" />', '', 1)
+
+    # ── 6. Return as download ─────────────────────────────────────────────────
     ts = _date.today().strftime("%Y-%m-%d")
     filename = f"cardboard-collection-{ts}.html"
-    
-    # Inject the JSON payload before </body>
-    json_payload = json.dumps(games_json)
-    # Find the position of </body> and insert before it
-    body_end_pos = html_content.rfind('</body>')
-    if body_end_pos == -1:
-        raise HTTPException(status_code=500, detail="Could not find </body> tag in share.html")
-    
-    # Create the script tag to inject
-    script_tag = f'<script>window.__STATIC_COLLECTION__ = {json_payload};</script>'
-    
-    # Insert the script tag before </body>
-    modified_html = html_content[:body_end_pos] + script_tag + '\n' + html_content[body_end_pos:]
-    
-    # Return as HTML response with download headers
     return Response(
-        content=modified_html,
+        content=html,
         media_type="text/html",
         headers={
             "Content-Disposition": f'attachment; filename="{_safe_header_filename(filename)}"',
             "Cache-Control": "no-cache",
-        }
+        },
     )
 
 

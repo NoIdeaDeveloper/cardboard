@@ -16,6 +16,7 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - **Player profile sessions-by-month chart always showed equal-height bars** — `.player-sessions-bar` had `flex: 1` which caused the flex algorithm to ignore the `height: ${pct}%` inline style, giving every bar the same height regardless of play count. Bars now use pixel heights calculated relative to the fixed chart area and the column uses `justify-content: flex-end` so bars grow from the bottom correctly.
+- **Static HTML export had no CSS and showed no games** — two bugs combined: (1) `style.css` was referenced as `/css/style.css`, an absolute path that a browser rejects when opening a local file; (2) `window.__STATIC_COLLECTION__` was injected just before `</body>`, after the inline script that reads it, so the variable was always `null` when the page initialised. The export now inlines the full CSS as a `<style>` block, inlines `shared-utils.js` with the data variable appended to the same script (guaranteeing it is defined before the main script block runs), and embeds the logo icon as a base64 data URL so no network requests are needed at all.
 
 ---
 
