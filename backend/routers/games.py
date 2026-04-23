@@ -701,7 +701,7 @@ async def restore_backup(file: UploadFile = File(...)):
     if len(content) > RESTORE_MAX_BYTES:
         raise HTTPException(status_code=413, detail="Backup file too large (max 500 MB)")
 
-    tmp_zip = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    tmp_zip = tempfile.NamedTemporaryFile(suffix=".zip", delete=False, dir=data_dir)
     try:
         tmp_zip.write(content)
         tmp_zip.close()
@@ -711,7 +711,7 @@ async def restore_backup(file: UploadFile = File(...)):
             if "cardboard.db" not in names:
                 raise HTTPException(status_code=422, detail="Invalid backup: cardboard.db not found in ZIP")
 
-            # Restore database
+            # Restore database — temp file is in same dir as db_path so os.replace is atomic
             db_tmp = tmp_zip.name + ".restore.db"
             with zf.open("cardboard.db") as src, open(db_tmp, "wb") as dst:
                 dst.write(src.read())
