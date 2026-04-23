@@ -2774,26 +2774,10 @@
       } catch (err) { showToast(`Import failed: ${classifyError(err)}`, 'error'); }
     });
 
-    // Share management
-    const shareManageBtn = statsView.querySelector('#stats-share-manage');
-    if (shareManageBtn) {
-      shareManageBtn.addEventListener('click', openShareManageModal);
-    }
-
     const backupBtn = statsView.querySelector('#stats-backup-download');
     backupBtn.addEventListener('click', () => {
       API.downloadBackup();
       showToast('Backup download started…', 'info');
-    });
-
-    statsView.querySelector('#stats-backup-json')?.addEventListener('click', () => {
-      API.downloadJsonBackup();
-      showToast('JSON backup download started…', 'info');
-    });
-
-    // Export static HTML page
-    statsView.querySelector('#stats-export-static')?.addEventListener('click', () => {
-      window.location.href = '/api/games/export/static-html';
     });
 
     // Restore from backup

@@ -728,11 +728,15 @@ async def restore_backup(file: UploadFile = File(...)):
             os.replace(db_tmp, db_path)
 
             # Restore media directories (optional — skip missing)
+            safe_data_dir = os.path.realpath(data_dir) + os.sep
             for arc_path in names:
                 # Only restore known subdirs
                 if not any(arc_path.startswith(d + "/") for d in ["images", "gallery", "instructions"]):
                     continue
-                dest = os.path.join(data_dir, arc_path)
+                dest = os.path.realpath(os.path.join(data_dir, arc_path))
+                # Reject any path that escapes data_dir (ZIP path traversal)
+                if not dest.startswith(safe_data_dir):
+                    continue
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 with zf.open(arc_path) as src, open(dest, "wb") as dst:
                     dst.write(src.read())

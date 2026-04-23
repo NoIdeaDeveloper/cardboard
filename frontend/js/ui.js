@@ -2720,7 +2720,26 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
         ${settingsTogglesHtml}
       </div>
       <div class="stats-export-group">
-        <span class="stats-export-label">Export collection</span>
+        <span class="stats-export-label">Backup & Restore</span>
+        <div class="stats-export-btns">
+          <button class="btn btn-secondary btn-sm" id="stats-backup-download" title="Download a ZIP containing your database and all images. Use this to move your collection to another server.">Download Backup</button>
+          <button class="btn btn-secondary btn-sm" id="stats-restore-btn" title="Restore from a ZIP backup. This replaces all current data.">Restore from Backup…</button>
+          <input type="file" id="stats-restore-file" accept=".zip" style="display:none">
+        </div>
+      </div>
+      <div class="stats-export-group">
+        <span class="stats-export-label">Import</span>
+        <div class="stats-export-btns">
+          <button class="btn btn-secondary btn-sm" id="stats-import-bgg" title="Import your BGG collection. On BGG go to your profile → Collection → Export → Export Collection as XML.">BGG Collection</button>
+          <input type="file" id="stats-import-bgg-file" accept=".xml" style="display:none" aria-hidden="true">
+          <button class="btn btn-secondary btn-sm" id="stats-import-bgg-plays" title="Import play history from BGG. On BGG go to your profile → Plays → Export Plays as XML.">BGG Plays</button>
+          <input type="file" id="stats-import-bgg-plays-file" accept=".xml" style="display:none" aria-hidden="true">
+          <button class="btn btn-secondary btn-sm" id="stats-import-csv" title="Import games from a CSV file with a 'name' column.">From CSV</button>
+          <input type="file" id="stats-import-csv-file" accept=".csv" style="display:none" aria-hidden="true">
+        </div>
+      </div>
+      <div class="stats-export-group">
+        <span class="stats-export-label">Export Data</span>
         <div class="stats-export-cols-wrapper" id="stats-export-cols-wrapper">
           <button type="button" class="stats-export-cols-btn" id="stats-export-cols-btn">Fields</button>
           <div class="stats-export-cols-dropdown" id="stats-export-cols-dropdown" hidden></div>
@@ -2728,43 +2747,6 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
         <div class="stats-export-btns">
           <button class="btn btn-secondary btn-sm" id="stats-export-json">JSON</button>
           <button class="btn btn-secondary btn-sm" id="stats-export-csv">CSV</button>
-        </div>
-      </div>
-      <div class="stats-export-group">
-        <span class="stats-export-label">Import from BGG</span>
-        <div class="stats-export-btns">
-          <button class="btn btn-secondary btn-sm" id="stats-import-bgg" title="Import your BGG collection. On BGG go to your profile → Collection → Export → Export Collection as XML.">Collection XML</button>
-          <input type="file" id="stats-import-bgg-file" accept=".xml" style="display:none" aria-hidden="true">
-          <button class="btn btn-secondary btn-sm" id="stats-import-bgg-plays" title="Import play history from BGG. On BGG go to your profile → Plays → Export Plays as XML.">Plays XML</button>
-          <input type="file" id="stats-import-bgg-plays-file" accept=".xml" style="display:none" aria-hidden="true">
-        </div>
-      </div>
-      <div class="stats-export-group">
-        <span class="stats-export-label">Import CSV</span>
-        <div class="stats-export-btns">
-          <button class="btn btn-secondary btn-sm" id="stats-import-csv">Import CSV</button>
-          <input type="file" id="stats-import-csv-file" accept=".csv" style="display:none" aria-hidden="true">
-        </div>
-      </div>
-      <div class="stats-export-group">
-        <span class="stats-export-label">Share collection</span>
-        <div class="stats-export-btns">
-          <button class="btn btn-secondary btn-sm" id="stats-share-manage">Manage Share Links</button>
-        </div>
-      </div>
-      <div class="stats-export-group">
-        <span class="stats-export-label">Backup</span>
-        <div class="stats-export-btns">
-          <button class="btn btn-secondary btn-sm" id="stats-backup-download" title="Download ZIP of database and media">DB Backup</button>
-          <button class="btn btn-secondary btn-sm" id="stats-backup-json" title="Download JSON + images (human-readable)">JSON Backup</button>
-          <button class="btn btn-secondary btn-sm" id="stats-restore-btn" title="Restore from a previous ZIP backup">Restore…</button>
-          <input type="file" id="stats-restore-file" accept=".zip" style="display:none">
-        </div>
-      </div>
-      <div class="stats-export-group">
-        <span class="stats-export-label">Static Export</span>
-        <div class="stats-export-btns">
-          <button class="btn btn-secondary btn-sm" id="stats-export-static" title="Download self-contained HTML page with all game data">Static HTML Page</button>
         </div>
       </div>
     </div>
