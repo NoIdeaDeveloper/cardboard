@@ -3143,10 +3143,14 @@
     const el = document.getElementById('stats-content');
     el.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>Loading statistics…</p></div>';
     try {
-      const [stats, goals] = await Promise.all([API.getStats(), API.getGoals().catch(() => [])]);
+      const [stats, goals, { data: allGames }] = await Promise.all([
+        API.getStats(),
+        API.getGoals().catch(() => []),
+        API.getGames({ limit: 5000, offset: 0 }),
+      ]);
       const prefs = loadStatsPrefs();
       el.innerHTML = '';
-      const statsView = buildStatsView(stats, state.games, prefs, saveStatsPrefs, goals);
+      const statsView = buildStatsView(stats, allGames ?? [], prefs, saveStatsPrefs, goals);
       el.appendChild(statsView);
       wireStatsView(statsView);
       wireGoalsSection(statsView);
@@ -3176,11 +3180,15 @@
     if (_statsLoading) return;
     if (!document.getElementById('view-stats')?.classList.contains('active')) return;
     try {
-      const [stats, goals] = await Promise.all([API.getStats(), API.getGoals().catch(() => [])]);
+      const [stats, goals, { data: allGames }] = await Promise.all([
+        API.getStats(),
+        API.getGoals().catch(() => []),
+        API.getGames({ limit: 5000, offset: 0 }),
+      ]);
       const prefs = loadStatsPrefs();
       const el = document.getElementById('stats-content');
       el.innerHTML = '';
-      const statsView = buildStatsView(stats, state.games, prefs, saveStatsPrefs, goals);
+      const statsView = buildStatsView(stats, allGames ?? [], prefs, saveStatsPrefs, goals);
       el.appendChild(statsView);
       wireStatsView(statsView);
       wireGoalsSection(statsView);
