@@ -218,6 +218,7 @@ class PlayerResponse(BaseModel):
     date_added: Optional[datetime] = None
     session_count: int = 0
     win_count: int = 0
+    avatar_url: Optional[str] = None  # set server-side when a custom photo exists
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -234,6 +235,7 @@ class PlayerCoPlayer(BaseModel):
     count: int
     wins_against: int = 0   # sessions where this player won while co-player was present
     losses_to: int = 0      # sessions where co-player won while this player was present
+    avatar_url: Optional[str] = None
 
 
 class PlayerSessionsByMonth(BaseModel):
@@ -387,6 +389,7 @@ class TopPlayerEntry(BaseModel):
     session_count: int
     win_count: int
     win_rate: int  # 0-100 percent
+    avatar_url: Optional[str] = None
 
 
 class SessionsByDowEntry(BaseModel):

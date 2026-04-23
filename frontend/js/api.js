@@ -177,11 +177,13 @@ const API = {
   suggestGames: (playerCount, maxMinutes) => request('POST', '/games/suggest', { player_count: playerCount, max_minutes: maxMinutes }),
 
   // Players
-  getPlayers:      ()           => request('GET',    '/players/'),
-  createPlayer:    (name)       => request('POST',   '/players/', { name }),
-  renamePlayer:    (id, name)   => request('PATCH',  `/players/${id}`, { name }),
-  deletePlayer:    (id)         => request('DELETE', `/players/${id}`),
-  getPlayerStats:  (id)         => request('GET',    `/players/${id}/stats`),
+  getPlayers:         ()           => request('GET',    '/players/'),
+  createPlayer:       (name)       => request('POST',   '/players/', { name }),
+  renamePlayer:       (id, name)   => request('PATCH',  `/players/${id}`, { name }),
+  deletePlayer:       (id)         => request('DELETE', `/players/${id}`),
+  getPlayerStats:     (id)         => request('GET',    `/players/${id}/stats`),
+  uploadPlayerAvatar: (id, file)   => uploadFile(`/players/${id}/avatar`, file),
+  deletePlayerAvatar: (id)         => request('DELETE', `/players/${id}/avatar`),
 
   // Collection sharing
   getShareTokens:    ()              => request('GET',    '/share/tokens'),

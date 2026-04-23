@@ -9,6 +9,14 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Player profile photos** — upload a custom photo for any player via the player profile panel (click a player's name to open it, then hover the avatar circle and click the camera icon). Photos are stored in `data/avatars/` and replace the coloured-initials circle everywhere a player avatar appears: player list, player profile panel, co-player rows in the profile, quick-log player chips, and the stats leaderboard. Existing photos can be removed with the × button that appears on hover. Profile photos are included in ZIP backups and restored automatically.
+
+### Fixed
+
+- **Player profile sessions-by-month chart always showed equal-height bars** — `.player-sessions-bar` had `flex: 1` which caused the flex algorithm to ignore the `height: ${pct}%` inline style, giving every bar the same height regardless of play count. Bars now use pixel heights calculated relative to the fixed chart area and the column uses `justify-content: flex-end` so bars grow from the bottom correctly.
+
 ---
 
 ## [0.2.2] — 2026-04-22

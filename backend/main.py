@@ -28,7 +28,7 @@ if not isinstance(_log_level, int):
     logger.warning("Invalid LOG_LEVEL=%r, defaulting to INFO", os.getenv("LOG_LEVEL"))
 
 # Ensure data directories exist
-for subdir in ["", "images", "instructions", "gallery"]:
+for subdir in ["", "images", "instructions", "gallery", "avatars"]:
     path = os.path.join(os.getenv("DATA_DIR", "/app/data"), subdir)
     os.makedirs(path, exist_ok=True)
     if subdir:

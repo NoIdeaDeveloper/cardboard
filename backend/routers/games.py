@@ -510,7 +510,7 @@ def download_backup(background_tasks: BackgroundTasks):
 
         with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.write(db_tmp, "cardboard.db")
-            for subdir in ["images", "instructions", "gallery"]:
+            for subdir in ["images", "instructions", "gallery", "avatars"]:
                 dir_path = os.path.join(data_dir, subdir)
                 for f in glob.glob(os.path.join(dir_path, "**"), recursive=True):
                     if os.path.isfile(f):
@@ -736,7 +736,7 @@ async def restore_backup(file: UploadFile = File(...)):
             safe_data_dir = os.path.realpath(data_dir) + os.sep
             for arc_path in names:
                 # Only restore known subdirs
-                if not any(arc_path.startswith(d + "/") for d in ["images", "gallery", "instructions"]):
+                if not any(arc_path.startswith(d + "/") for d in ["images", "gallery", "instructions", "avatars"]):
                     continue
                 dest = os.path.realpath(os.path.join(data_dir, arc_path))
                 # Reject any path that escapes data_dir (ZIP path traversal)

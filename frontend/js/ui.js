@@ -2453,12 +2453,10 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
         ${topPlayers.map((p, i) => {
           const maxSessions = topPlayers[0].session_count;
           const pct = Math.round((p.session_count / maxSessions) * 100);
-          const avatarColor = typeof playerAvatarColor === 'function' ? playerAvatarColor(p.player_name) : '#888';
-          const initials = typeof playerInitials === 'function' ? playerInitials(p.player_name) : p.player_name[0];
           return `
             <div class="most-played-item">
               <div class="most-played-rank">${i + 1}</div>
-              <div class="player-avatar player-avatar-sm" style="--avatar-color:${avatarColor};flex-shrink:0">${escapeHtml(initials)}</div>
+              ${renderPlayerAvatar({ name: p.player_name, avatar_url: p.avatar_url || null }, 'player-avatar player-avatar-sm')}
               <div class="most-played-info">
                 <div class="most-played-name">${escapeHtml(p.player_name)}</div>
                 <div class="stat-bar-track"><div class="stat-bar-fill" style="width:0%" data-target-width="${pct}%"></div></div>

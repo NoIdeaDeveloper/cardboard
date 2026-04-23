@@ -66,7 +66,8 @@
     virtualOffset: 0,       // how many cards have been appended so far
     serverOffset: 0,        // offset of the next server page to fetch
     serverTotal: 0,         // total matching games on the server
-    players: [],     // known player names for autocomplete
+    players: [],        // known player names for autocomplete
+    playerObjects: [],  // full player objects (id, name, avatar_url, …)
     viewMode: _cp.viewMode,
     sortBy: _cp.sortBy,
     sortDir: _cp.sortDir,
@@ -98,6 +99,11 @@
   // Monotonic id for loadCollection calls. Rapid tab clicks can have overlapping
   // fetches in flight; only the latest caller is allowed to write state.games.
   let _loadCollectionReqId = 0;
+
+  // IntersectionObserver for virtual-paging the collection grid. Stored so it
+  // can be torn down at the start of every renderCollection() call — prevents
+  // the stale closure from appending old game cards when an empty tab is shown.
+  let _virtualPageObserver = null;
 
   // ===== Error Classification =====
   function classifyError(err) {
@@ -165,7 +171,7 @@
     });
     syncCollectionUI();
     // Load players for autocomplete (non-blocking)
-    API.getPlayers().then(p => { state.players = p.map(pl => pl.name); }).catch(err => {
+    API.getPlayers().then(p => { state.players = p.map(pl => pl.name); state.playerObjects = p; }).catch(err => {
       console.warn('Failed to load players for autocomplete:', err);
     });
     const initialView = location.hash.replace('#', '') || 'collection';
@@ -801,6 +807,14 @@
       statsEl.innerHTML = '';
     }
 
+    // Tear down any active virtual-page observer and stale sentinel / load-more
+    // button BEFORE the early-return paths so they are never left alive on an
+    // empty tab (their stale closures would otherwise append old game cards).
+    _virtualPageObserver?.disconnect();
+    _virtualPageObserver = null;
+    document.getElementById('virtual-sentinel')?.remove();
+    document.getElementById('server-load-more')?.remove();
+
     container.innerHTML = '';
 
     // Check if this is a truly empty collection (all tab, no games) vs an empty filtered tab
@@ -934,8 +948,6 @@
       });
     }
 
-    // Remove existing sentinel if present (e.g. from previous render)
-    document.getElementById('virtual-sentinel')?.remove();
     state.virtualOffset = 0;
 
     // Render first page
@@ -950,22 +962,20 @@
       sentinel.id = 'virtual-sentinel';
       container.after(sentinel);
 
-      const loadMoreObserver = new IntersectionObserver((entries) => {
+      _virtualPageObserver = new IntersectionObserver((entries) => {
         if (!entries[0].isIntersecting) return;
         const next = filtered.slice(state.virtualOffset, state.virtualOffset + VIRTUAL_PAGE_SIZE);
-        if (!next.length) { loadMoreObserver.disconnect(); sentinel.remove(); return; }
+        if (!next.length) { _virtualPageObserver?.disconnect(); _virtualPageObserver = null; sentinel.remove(); return; }
         next.forEach(game => container.appendChild(_buildCard(game)));
         state.virtualOffset += VIRTUAL_PAGE_SIZE;
         _observeNewCards();
-        if (state.virtualOffset >= filtered.length) { loadMoreObserver.disconnect(); sentinel.remove(); }
+        if (state.virtualOffset >= filtered.length) { _virtualPageObserver?.disconnect(); _virtualPageObserver = null; sentinel.remove(); }
       }, { rootMargin: '300px' });
 
-      loadMoreObserver.observe(sentinel);
+      _virtualPageObserver.observe(sentinel);
     }
 
     // If the server has more games beyond the current page, show a "Load more" button
-    const existingLoadMore = document.getElementById('server-load-more');
-    if (existingLoadMore) existingLoadMore.remove();
     if (state.serverTotal > state.serverOffset) {
       const remaining = state.serverTotal - state.serverOffset;
       const btn = document.createElement('button');
@@ -1099,7 +1109,13 @@
             <div class="quick-log-field ql-full">
               <label>Who played?</label>
               ${state.players.length ? `<div class="ql-player-chips" id="ql-player-chips">
-                ${state.players.slice(0, 10).map(p => `<button type="button" class="ql-player-chip" data-name="${escapeHtml(p)}"><span class="ql-chip-avatar" style="background:${playerAvatarColor(p)}">${escapeHtml(playerInitials(p))}</span>${escapeHtml(p)}</button>`).join('')}
+                ${(() => {
+                  const playerMap = Object.fromEntries((state.playerObjects || []).map(p => [p.name, p]));
+                  return state.players.slice(0, 10).map(name => {
+                    const pObj = playerMap[name] || { name, avatar_url: null };
+                    return `<button type="button" class="ql-player-chip" data-name="${escapeHtml(name)}">${renderPlayerAvatar(pObj, 'ql-chip-avatar')}${escapeHtml(name)}</button>`;
+                  }).join('');
+                })()}
               </div>` : ''}
               <input type="text" id="ql-players-names" class="form-input" placeholder="${state.players.length ? 'Or type additional names…' : 'comma-separated names'}" autocomplete="off">
             </div>
@@ -1236,7 +1252,7 @@
         refreshCollectionStats();
         // Refresh players list
         if (playerNames.length) {
-          API.getPlayers().then(p => { state.players = p.map(pl => pl.name); }).catch(() => {});
+          API.getPlayers().then(p => { state.players = p.map(pl => pl.name); state.playerObjects = p; }).catch(() => {});
         }
       }), 'Logging…');
       close();
@@ -1589,11 +1605,9 @@
       const winLabel = p.win_count > 0
         ? `<span class="player-wins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/></svg>${p.win_count}</span>`
         : '';
-      const avatarColor = playerAvatarColor(p.name);
-      const initials = playerInitials(p.name);
       return `
         <div class="player-row" data-player-id="${p.id}" data-player-name="${escapeHtml(p.name)}">
-          <div class="player-avatar" style="background:${avatarColor}" aria-hidden="true">${escapeHtml(initials)}</div>
+          ${renderPlayerAvatar(p, 'player-avatar')}
           <span class="player-name">${escapeHtml(p.name)}</span>
           <span class="player-count">${sessionLabel}${winLabel}</span>
           <div class="player-actions">
@@ -1685,6 +1699,9 @@
           await withLoading(addBtn, async () => {
             const player = await API.createPlayer(name);
             state.players = [...new Set([...state.players, player.name])].sort();
+            if (!(state.playerObjects || []).some(p => p.id === player.id)) {
+              state.playerObjects = [...(state.playerObjects || []), player].sort((a, b) => a.name.localeCompare(b.name));
+            }
             addInput.value = '';
             playerSearch = '';
             await renderPlayers();
@@ -1779,6 +1796,8 @@
                 const updated = await API.renamePlayer(playerId, newName);
                 state.players = state.players.map(n => n === currentName ? updated.name : n);
                 state.players = [...new Set(state.players)].sort();
+                const pObj = (state.playerObjects || []).find(p => p.id === playerId);
+                if (pObj) pObj.name = updated.name;
                 await renderPlayers();
               }, 'Saving…');
             } catch (err) {
@@ -1820,6 +1839,7 @@
               await withLoading(confirmYesBtn, async () => {
                 await API.deletePlayer(playerId);
                 state.players = state.players.filter(n => n !== playerName);
+                state.playerObjects = (state.playerObjects || []).filter(p => p.id !== playerId);
                 confirmRow.remove();
                 row.remove();
                 if (!listEl.querySelector('.player-row')) {
@@ -1843,10 +1863,18 @@
       });
     }
 
-    function openPlayerProfile(player) {
-      const avatarColor = playerAvatarColor(player.name);
-      const initials    = playerInitials(player.name);
+    function _buildProfileAvatarWrap(player) {
+      return `<div class="player-avatar-wrap player-profile-avatar-wrap">
+        ${renderPlayerAvatar(player, 'player-profile-avatar')}
+        <label class="avatar-upload-trigger" title="${player.avatar_url ? 'Change photo' : 'Upload photo'}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <input type="file" class="avatar-file-input" accept=".jpg,.jpeg,.png,.webp,.gif" hidden>
+        </label>
+        ${player.avatar_url ? '<button class="avatar-delete-btn" title="Remove photo" type="button">×</button>' : ''}
+      </div>`;
+    }
 
+    function openPlayerProfile(player) {
       const panel = document.createElement('div');
       panel.className = 'player-profile-panel';
       panel.innerHTML = `
@@ -1855,7 +1883,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg>
             Back
           </button>
-          <div class="player-profile-avatar" style="background:${avatarColor}">${escapeHtml(initials)}</div>
+          ${_buildProfileAvatarWrap(player)}
           <h3 class="player-profile-name">${escapeHtml(player.name)}</h3>
         </div>
         <div class="player-profile-body">
@@ -1868,6 +1896,41 @@
       panel.querySelector('.player-profile-back').addEventListener('click', () => {
         panel.classList.remove('open');
         setTimeout(() => panel.remove(), 220);
+      });
+
+      // Avatar upload via delegated events so they survive wrap re-renders
+      panel.addEventListener('change', async e => {
+        const input = e.target.closest('.avatar-file-input');
+        if (!input) return;
+        const file = input.files[0];
+        if (!file) return;
+        try {
+          const updated = await API.uploadPlayerAvatar(player.id, file);
+          player.avatar_url = updated.avatar_url;
+          const wrap = panel.querySelector('.player-profile-avatar-wrap');
+          if (wrap) { wrap.insertAdjacentHTML('afterend', _buildProfileAvatarWrap(player)); wrap.remove(); }
+          const pObj = (state.playerObjects || []).find(p => p.id === player.id);
+          if (pObj) pObj.avatar_url = updated.avatar_url;
+          showToast('Photo updated', 'success');
+        } catch (err) {
+          showToast(`Failed to upload: ${classifyError(err)}`, 'error');
+        }
+        input.value = '';
+      });
+
+      panel.addEventListener('click', async e => {
+        if (!e.target.closest('.avatar-delete-btn')) return;
+        try {
+          await API.deletePlayerAvatar(player.id);
+          player.avatar_url = null;
+          const wrap = panel.querySelector('.player-profile-avatar-wrap');
+          if (wrap) { wrap.insertAdjacentHTML('afterend', _buildProfileAvatarWrap(player)); wrap.remove(); }
+          const pObj = (state.playerObjects || []).find(p => p.id === player.id);
+          if (pObj) pObj.avatar_url = null;
+          showToast('Photo removed', 'success');
+        } catch (err) {
+          showToast(`Failed to remove: ${classifyError(err)}`, 'error');
+        }
       });
 
       API.getPlayerStats(player.id).then(stats => {
@@ -1890,6 +1953,7 @@
           : '';
 
         // Sessions-by-month mini bar chart (last 12 months)
+        // Bar heights are in px (chart 56px - 10px label - 2px gap = 44px bar area)
         let sessionsByMonthHtml = '';
         if (stats.sessions_by_month && stats.sessions_by_month.length > 0) {
           const now = new Date();
@@ -1902,13 +1966,14 @@
             if (m) m.count = r.count;
           });
           const maxCount = Math.max(...months.map(m => m.count), 1);
+          const barAreaPx = 44;
           sessionsByMonthHtml = `
             <div class="player-profile-section-title">Sessions (12 months)</div>
             <div class="player-sessions-chart">
               ${months.map(m => {
-                const pct = Math.round((m.count / maxCount) * 100);
+                const px = m.count > 0 ? Math.max(3, Math.round((m.count / maxCount) * barAreaPx)) : 0;
                 return `<div class="player-sessions-col" title="${m.label}: ${m.count}">
-                  <div class="player-sessions-bar" style="height:${pct}%;min-height:${m.count > 0 ? '3px' : '0'}"></div>
+                  <div class="player-sessions-bar" style="height:${px}px"></div>
                   <div class="player-sessions-label">${m.label.charAt(0)}</div>
                 </div>`;
               }).join('')}
@@ -1923,7 +1988,7 @@
           const w = co.wins_against, l = co.losses_to;
           const rivalryHtml = (w + l > 0) ? `<span class="rivalry-record">${w}W–${l}L</span>` : '';
           return `<div class="player-coplayer-row">
-            <div class="player-avatar player-avatar-sm" style="background:${playerAvatarColor(co.player_name)}">${escapeHtml(playerInitials(co.player_name))}</div>
+            ${renderPlayerAvatar({ name: co.player_name, avatar_url: co.avatar_url }, 'player-avatar player-avatar-sm')}
             <span>${escapeHtml(co.player_name)}</span>
             ${rivalryHtml}
             <span class="player-top-game-count">${pluralize(co.count, 'time')}</span>
