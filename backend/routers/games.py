@@ -1176,7 +1176,9 @@ async def import_bgg(file: UploadFile = File(...), db: Session = Depends(get_db)
     for item in items:
         try:
             # Name: BGG exports have <name sortindex="1">Title</name>
-            name_el = item.find("name[@sortindex='1']") or item.find("name")
+            name_el = item.find("name[@sortindex='1']")
+            if name_el is None:
+                name_el = item.find("name")
             name = (name_el.text or "").strip() if name_el is not None else ""
             if not name:
                 results["skipped"] += 1

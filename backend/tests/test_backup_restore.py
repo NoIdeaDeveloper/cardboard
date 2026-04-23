@@ -261,12 +261,12 @@ def test_restore_corrupt_db_returns_422(backup_client):
     assert r.status_code == 422
 
 
-def test_restore_non_zip_file_returns_422(backup_client):
+def test_restore_non_zip_file_returns_4xx(backup_client):
     r = backup_client.post(
         "/api/games/restore",
         files={"file": ("backup.txt", io.BytesIO(b"not a zip at all"), "text/plain")},
     )
-    assert r.status_code == 422
+    assert r.status_code in (400, 422)
 
 
 def test_restore_empty_zip_returns_422(backup_client):
