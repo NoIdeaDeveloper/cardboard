@@ -256,7 +256,15 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
     : '';
 
   const hasPurchaseInfo = game.purchase_date || game.purchase_price != null || game.purchase_location;
-  const totalSessionMinutes = sessions.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
+  // Sum recorded durations; for sessions without duration use min_playtime as
+  // fallback (then avg of recorded sessions) so unlogged plays don't silently
+  // inflate the cost/hr by understating total hours played.
+  const sessionsWith    = sessions.filter(s => s.duration_minutes);
+  const sessionsWithout = sessions.length - sessionsWith.length;
+  const recordedMinutes = sessionsWith.reduce((sum, s) => sum + s.duration_minutes, 0);
+  const fallbackMinutes = game.min_playtime
+    || (sessionsWith.length > 0 ? Math.round(recordedMinutes / sessionsWith.length) : 0);
+  const totalSessionMinutes = recordedMinutes + sessionsWithout * fallbackMinutes;
   const cph = (game.purchase_price > 0 && totalSessionMinutes > 0)
     ? (game.purchase_price / (totalSessionMinutes / 60)).toFixed(2)
     : null;
