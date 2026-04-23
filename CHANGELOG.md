@@ -9,6 +9,20 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [0.2.2] — 2026-04-22
+
+### Fixed
+
+- **Restore silently loaded no data after success** — after `os.replace` atomically swapped the database file, SQLAlchemy's connection pool still held open connections to the previous file descriptor (SQLite WAL keeps the old inode alive). All subsequent reads returned the pre-restore collection. `engine.dispose()` is now called immediately after the file swap, flushing all pooled connections so the next request opens a fresh connection against the restored database.
+- **Star ratings only highlighted the hovered star** — hovering over star 3 (for example) lit up only that star instead of stars 1–3. The quick-log popup, the log-session form, and the session-edit form all lacked `mouseover`/`mouseleave` handlers; only click was wired. Each picker now highlights all stars up to the hovered value on hover, and restores the committed selection on mouse-leave.
+- **Welcome tagline and empty-tab messages not centred** — the `#empty-state` container is a flex column, but the JS was toggling it with `display: block`, disabling `align-items: center` and leaving the tagline left-aligned. Changed to `display: flex`. The "No owned/wishlist/sold games yet" messages were injected as a child of the `games-grid` CSS grid and only occupied one narrow column cell; added `grid-column: 1 / -1` to `.empty-search-state` so it spans the full grid width.
+
+---
+
+## [0.2.1] — 2026-04-22
+
 ### Added
 
 - **Stats section info popovers** — every stats section now has an ⓘ button that reveals an explanatory popover. Only one popover is open at a time; pressing Escape closes the active one.
