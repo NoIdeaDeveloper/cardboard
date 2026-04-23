@@ -808,7 +808,7 @@
     const isEmptyFilteredTab = state.games.length === 0 && !isTrulyEmpty;
 
     if (isTrulyEmpty) {
-      emptyState.style.display = 'block';
+      emptyState.style.display = 'flex';
       document.getElementById('recently-played-shelf').style.display = 'none';
       return;
     }
