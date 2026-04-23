@@ -1087,7 +1087,10 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
           </button>`).join('');
         if (onOpenGame) {
           similarList.querySelectorAll('.similar-game-chip').forEach(btn => {
-            btn.addEventListener('click', () => onOpenGame(parseInt(btn.dataset.gameId, 10)));
+            btn.addEventListener('click', () => {
+              const target = allGames.find(g => g.id === parseInt(btn.dataset.gameId, 10));
+              if (target) onOpenGame(target);
+            });
           });
         }
       }).catch(() => { /* non-fatal */ });
