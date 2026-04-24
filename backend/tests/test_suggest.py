@@ -1,4 +1,4 @@
-"""Tests for the POST /api/games/suggest (game night) endpoint."""
+"""Tests for the POST /api/games/suggest (game night) and GET similar-games endpoints."""
 import pytest
 from datetime import date, timedelta
 
@@ -119,3 +119,91 @@ def test_suggest_no_filters_returns_all_owned(client):
     r = _suggest(client)
     assert r.status_code == 200
     assert len(r.json()) == 3
+
+
+def _add_session_with_rating(client, game_id, session_rating, played_at=None):
+    if played_at is None:
+        played_at = (date.today() - timedelta(days=90)).isoformat()
+    r = client.post(
+        f"/api/games/{game_id}/sessions",
+        json={"played_at": played_at, "session_rating": session_rating},
+    )
+    assert r.status_code == 201
+
+
+# ---------------------------------------------------------------------------
+# New quality-signal tests
+# ---------------------------------------------------------------------------
+
+def test_suggest_bgg_rating_used_when_no_user_rating(client):
+    """BGG rating should act as a quality proxy when user_rating is absent."""
+    high_id = _make_game(client, "High BGG", bgg_rating=9.0)
+    low_id = _make_game(client, "Low BGG", bgg_rating=5.0)
+
+    r = _suggest(client)
+    results = r.json()
+    names = [g["name"] for g in results]
+    assert "High BGG" in names
+    assert "Low BGG" in names
+    assert names.index("High BGG") < names.index("Low BGG")
+
+
+def test_suggest_session_rating_used(client):
+    """Average session_rating should rank a game higher than one with poor session ratings."""
+    loved_id = _make_game(client, "Loved Game")
+    disliked_id = _make_game(client, "Disliked Game")
+
+    # Both played the same number of times; only session ratings differ
+    for _ in range(3):
+        _add_session_with_rating(client, loved_id, session_rating=5)
+        _add_session_with_rating(client, disliked_id, session_rating=1)
+
+    r = _suggest(client)
+    results = r.json()
+    names = [g["name"] for g in results]
+    assert "Loved Game" in names
+    assert "Disliked Game" in names
+    assert names.index("Loved Game") < names.index("Disliked Game")
+
+
+def test_suggest_low_rated_game_penalized(client):
+    """A game rated 2/10 should rank below a game with no rating at all."""
+    bad_id = _make_game(client, "Bad Game", user_rating=2.0)
+    neutral_id = _make_game(client, "Neutral Game")
+
+    r = _suggest(client)
+    results = r.json()
+    names = [g["name"] for g in results]
+    assert "Bad Game" in names
+    assert "Neutral Game" in names
+    assert names.index("Neutral Game") < names.index("Bad Game")
+
+
+# ---------------------------------------------------------------------------
+# Similar games IDF weighting test
+# ---------------------------------------------------------------------------
+
+def test_similar_games_rare_mechanic_scores_higher(client):
+    """A shared rare mechanic should produce a higher similarity score than a shared common one."""
+    import json as _json
+    # Source game has both a rare mechanic and a common mechanic
+    source_id = _make_game(client, "Source Game", mechanics=_json.dumps(["Rare Mechanic", "Common Mechanic"]))
+
+    # Two extra games sharing the common mechanic make it "common" relative to the rare one
+    for i in range(2):
+        _make_game(client, f"Common Game {i}", mechanics=_json.dumps(["Common Mechanic"]))
+
+    # Rare match: shares only the rare mechanic
+    rare_match_id = _make_game(client, "Rare Match", mechanics=_json.dumps(["Rare Mechanic"]))
+
+    # Common match: shares only the common mechanic
+    common_match_id = _make_game(client, "Common Match", mechanics=_json.dumps(["Common Mechanic"]))
+
+    r = client.get(f"/api/games/{source_id}/similar")
+    assert r.status_code == 200
+    results = r.json()
+    names = [g["name"] for g in results]
+
+    assert "Rare Match" in names
+    assert "Common Match" in names
+    assert names.index("Rare Match") < names.index("Common Match")

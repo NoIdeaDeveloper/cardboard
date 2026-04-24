@@ -5,6 +5,7 @@ import glob
 import io
 import json
 import logging
+import math
 import os
 import re
 import sqlite3
@@ -874,18 +875,46 @@ def get_similar_games(game_id: int, db: Session = Depends(get_db)):
     for gid, name in mech_rows:
         mechs_by_game.setdefault(gid, set()).add(name)
 
+    # IDF: count how many games carry each tag across the whole candidate pool
+    total_games = len(candidates) + 1  # +1 for source game
+    cat_freq: dict[str, int] = {}
+    for _, name in cat_rows:
+        cat_freq[name] = cat_freq.get(name, 0) + 1
+    mech_freq: dict[str, int] = {}
+    for _, name in mech_rows:
+        mech_freq[name] = mech_freq.get(name, 0) + 1
+
+    def _idf(tag: str, freq_map: dict[str, int]) -> float:
+        df = freq_map.get(tag, 1)
+        return math.log(total_games / df) + 1.0
+
     scored = []
     for c in candidates:
-        score = 0
-        score += len(game_categories & cats_by_game.get(c.id, set()))
-        score += len(game_mechanics & mechs_by_game.get(c.id, set())) * 2  # mechanics weighted 2×
+        shared_cats = game_categories & cats_by_game.get(c.id, set())
+        shared_mechs = game_mechanics & mechs_by_game.get(c.id, set())
 
-        if game.min_players and game.max_players and c.min_players and c.max_players:
-            if game.max_players >= c.min_players and c.max_players >= game.min_players:
-                score += 1
+        cat_score = sum(_idf(t, cat_freq) for t in shared_cats)
+        mech_score = sum(_idf(t, mech_freq) * 1.5 for t in shared_mechs)
 
-        if game.difficulty and c.difficulty and abs(game.difficulty - c.difficulty) <= 0.5:
-            score += 1
+        # Normalize by tag-set sizes so games with many tags don't dominate
+        total_tags_source = len(game_categories) + len(game_mechanics)
+        total_tags_cand = len(cats_by_game.get(c.id, set())) + len(mechs_by_game.get(c.id, set()))
+        denom = math.sqrt(total_tags_source + total_tags_cand) if (total_tags_source + total_tags_cand) > 0 else 1.0
+        score = (cat_score + mech_score) / denom
+
+        # Player-count Jaccard overlap
+        if all(x is not None for x in [game.min_players, game.max_players, c.min_players, c.max_players]):
+            overlap_lo = max(game.min_players, c.min_players)
+            overlap_hi = min(game.max_players, c.max_players)
+            if overlap_hi >= overlap_lo:
+                overlap = overlap_hi - overlap_lo + 1
+                union = (game.max_players - game.min_players + 1) + (c.max_players - c.min_players + 1) - overlap
+                score += overlap / union
+
+        # Graduated difficulty — linear decay from +1.5 (identical) to 0 (gap ≥ 2.0)
+        if game.difficulty and c.difficulty:
+            diff_gap = abs(game.difficulty - c.difficulty)
+            score += max(0.0, 1.5 * (1.0 - diff_gap / 2.0))
 
         if score > 0:
             scored.append((score, c))
@@ -1514,8 +1543,26 @@ def suggest_games(body: schemas.SuggestRequest, db: Session = Depends(get_db)):
         ).group_by(models.PlaySession.game_id).all()
     }
 
+    # Average per-session rating per game (1–5 scale)
+    session_avg_ratings = {
+        row.game_id: row.avg_rating
+        for row in db.query(
+            models.PlaySession.game_id,
+            func.avg(models.PlaySession.session_rating).label("avg_rating")
+        )
+        .filter(models.PlaySession.session_rating.isnot(None))
+        .group_by(models.PlaySession.game_id)
+        .all()
+    }
+
     today = date.today()
     recent_cutoff = today - timedelta(days=30)
+
+    def _difficulty_band(d: Optional[float]) -> str:
+        if d is None:   return "unknown"
+        if d <= 2.0:    return "light"
+        if d <= 3.5:    return "medium"
+        return "heavy"
 
     scored = []
     for g in games:
@@ -1524,13 +1571,30 @@ def suggest_games(body: schemas.SuggestRequest, db: Session = Depends(get_db)):
         count = session_counts.get(g.id, 0)
 
         if count == 0:
-            score += 3
+            # Scale discovery bonus by BGG quality hint so unplayed games don't unconditionally crowd out loved ones
+            quality_hint = g.bgg_rating / 10.0 if g.bgg_rating else 0.5
+            score += 1.5 + quality_hint  # range 1.5–2.5
             reasons.append("Never Played")
 
-        if g.user_rating:
-            score += g.user_rating / 2
-            if g.user_rating >= 8:
-                reasons.append("High Rating")
+        # Priority-ordered quality signal: user rating > session avg > BGG rating > neutral prior
+        avg_session = session_avg_ratings.get(g.id)
+        if g.user_rating is not None:
+            quality_score = g.user_rating / 2.0          # 0.5–5.0
+        elif avg_session is not None:
+            quality_score = float(avg_session)            # 1.0–5.0
+        elif g.bgg_rating is not None:
+            quality_score = g.bgg_rating / 2.0 * 0.7     # up to 3.5 (discounted: community, not personal)
+        else:
+            quality_score = 2.5                           # neutral prior
+
+        score += quality_score
+
+        if (g.user_rating or 0) >= 8 or (avg_session or 0) >= 4:
+            reasons.append("High Rating")
+
+        # Penalize games the user has explicitly disliked
+        if g.user_rating is not None and g.user_rating <= 4:
+            score -= (5 - g.user_rating) * 0.4           # rating 4 → -0.4, rating 1 → -1.6
 
         if g.last_played and g.last_played >= recent_cutoff:
             score -= 1  # played recently, penalise slightly
@@ -1547,8 +1611,16 @@ def suggest_games(body: schemas.SuggestRequest, db: Session = Depends(get_db)):
 
     scored.sort(key=lambda x: -x[0])
 
+    # Diversity cap: at most 3 results from the same difficulty band
     results = []
-    for score, g, reasons in scored[:5]:
+    band_counts: dict[str, int] = {}
+    for score, g, reasons in scored:
+        if len(results) >= 5:
+            break
+        band = _difficulty_band(g.difficulty)
+        if band != "unknown" and band_counts.get(band, 0) >= 3:
+            continue
+        band_counts[band] = band_counts.get(band, 0) + 1
         results.append(schemas.GameSuggestion(
             id=g.id,
             name=g.name,

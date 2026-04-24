@@ -95,7 +95,8 @@ Alternatively, install the **Compose Manager** plugin and use the `docker-compos
 - **Stats dashboard** — totals, most-played, player leaderboard, rating distribution, added/sessions-by-month charts, 52-week activity heatmap, day-of-week breakdown, shelf of shame, collection value
 - **Goals & challenges** — progress-tracked goals (total sessions, play all owned, unique mechanics, etc.) with auto-complete detection
 - **Sharing** — token-based read-only share links with optional expiry; visitors can browse, filter, and submit "want to play" requests; export a self-contained static HTML page to share without exposing your server
-- **Game night** — suggestion engine filtered by player count and playtime; random "Pick for Me" selector
+- **Game night** — suggestion engine filtered by player count and playtime; scores games using user ratings, per-session ratings, and BGG rating as a fallback; penalizes low-rated and recently-played games; enforces variety across difficulty bands; random "Pick for Me" selector
+- **Similar games** — IDF-weighted mechanic and category matching (rare tags score higher than ubiquitous ones), graduated difficulty comparison, and Jaccard player-count overlap
 - **Quality of life** — dark/light theme, keyboard shortcuts overlay, milestone confetti, PWA support, ETag caching
 
 ## Configuration
