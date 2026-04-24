@@ -2800,9 +2800,12 @@
         heatmapWrap.classList.toggle('scrolled-end', atEnd);
       };
       heatmapScroll.addEventListener('scroll', _checkHeatScroll, { passive: true });
-      // Scroll to the right end by default (most recent weeks)
-      heatmapScroll.scrollLeft = heatmapScroll.scrollWidth;
-      _checkHeatScroll();
+      // Defer scroll to the next frame — scrollWidth may be 0 if the element was
+      // just inserted into the DOM in the same synchronous task.
+      requestAnimationFrame(() => {
+        heatmapScroll.scrollLeft = heatmapScroll.scrollWidth;
+        _checkHeatScroll();
+      });
     }
 
     const colsDropdown = statsView.querySelector('#stats-export-cols-dropdown');

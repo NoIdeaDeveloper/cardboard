@@ -2802,7 +2802,12 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
         obs.unobserve(entry.target);
       });
     }, { threshold: 0.12 });
-    el.querySelectorAll('.stats-section, .stat-cards').forEach(s => _statsIO.observe(s));
+    // Defer observation to the next frame so the element is guaranteed to be in the DOM
+    // (buildStatsView returns a detached element; the caller appends it after this call).
+    // Observing detached elements fires isIntersecting:false immediately and may not re-fire.
+    requestAnimationFrame(() => {
+      el.querySelectorAll('.stats-section, .stat-cards').forEach(s => _statsIO.observe(s));
+    });
   } else {
     // Fallback: set immediately
     el.querySelectorAll('.stat-bar-fill[data-target-width]').forEach(bar => { bar.style.width = bar.dataset.targetWidth; });
