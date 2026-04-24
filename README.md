@@ -92,11 +92,12 @@ Alternatively, install the **Compose Manager** plugin and use the `docker-compos
 - **Media** — cover images, multi-image photo gallery with captions, instruction PDF upload with inline viewer, 3D scan upload (USDZ/GLB) with AR and in-browser viewer
 - **Play tracking** — log sessions with date, duration, players, winner, notes, and per-session rating; quick-log overlay on game cards; solo mode
 - **Player profiles** — per-player stats, win rates, top games, co-player leaderboard with head-to-head records
-- **Stats dashboard** — totals, most-played, player leaderboard, rating distribution, added/sessions-by-month charts, 52-week activity heatmap, day-of-week breakdown, shelf of shame, collection value
+- **Stats dashboard** — totals, most-played, player leaderboard, rating distribution, added/sessions-by-month charts, 52-week activity heatmap (scrolled to the current week on load), day-of-week breakdown, shelf of shame, collection value
 - **Goals & challenges** — progress-tracked goals (total sessions, play all owned, unique mechanics, etc.) with auto-complete detection
 - **Sharing** — token-based read-only share links with optional expiry; visitors can browse, filter, and submit "want to play" requests; export a self-contained static HTML page to share without exposing your server
 - **Game night** — suggestion engine filtered by player count and playtime; scores games using user ratings, per-session ratings, and BGG rating as a fallback; penalizes low-rated and recently-played games; enforces variety across difficulty bands; random "Pick for Me" selector
 - **Similar games** — IDF-weighted mechanic and category matching (rare tags score higher than ubiquitous ones), graduated difficulty comparison, and Jaccard player-count overlap
+- **Onboarding tour** — first-visit coach-mark walkthrough of key features; dismissing or completing it is permanently recorded in the database (with a localStorage cache) so you are never re-prompted
 - **Quality of life** — dark/light theme, keyboard shortcuts overlay, milestone confetti, PWA support, ETag caching
 
 ## Configuration
