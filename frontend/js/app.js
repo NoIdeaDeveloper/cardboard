@@ -3560,6 +3560,10 @@
 
   // ===== First-Visit Coach Mark Tour =====
   const TOUR_DONE_KEY = 'cardboard_tour_done';
+  // In-memory guard: set to true the moment any maybeStartTour call claims the check.
+  // Prevents concurrent calls (loadCollection fires from many places) from each
+  // independently deciding to start the tour.
+  let _tourCheckDone = false;
 
   const TOUR_STEPS = [
     {
@@ -3674,6 +3678,7 @@
       overlay.style.display   = 'none';
       tooltip.style.display   = 'none';
       spotlight.style.display = 'none';
+      _tourCheckDone = true;
       localStorage.setItem(TOUR_DONE_KEY, '1');
       API.setSetting(TOUR_DONE_KEY, '1').catch(() => {});
     }
@@ -3682,9 +3687,13 @@
   }
 
   async function maybeStartTour() {
+    if (_tourCheckDone) return;
     if (!state.games || state.games.length === 0) return;
     // Fast path: localStorage cache avoids a server round-trip on repeat visits
-    if (localStorage.getItem(TOUR_DONE_KEY)) return;
+    if (localStorage.getItem(TOUR_DONE_KEY)) { _tourCheckDone = true; return; }
+    // Claim the check before any await so concurrent calls from other loadCollection
+    // invocations bail out immediately rather than each starting their own tour.
+    _tourCheckDone = true;
     try {
       const { value } = await API.getSetting(TOUR_DONE_KEY);
       if (value === '1') {
