@@ -5,7 +5,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -295,39 +295,31 @@ def get_player_stats(player_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    # Head-to-head W/L for each co-player
-    rivalry_data = {}
-    for c in co_player_rows:
-        co_sessions = (
-            db.query(models.SessionPlayer.session_id)
-            .filter(models.SessionPlayer.player_id == c.id)
-            .subquery()
+    # Head-to-head W/L for each co-player, in one aggregated query over sessions
+    # that both the target player and each co-player participated in.
+    target_sessions = (
+        db.query(models.SessionPlayer.session_id)
+        .filter(models.SessionPlayer.player_id == player_id)
+        .subquery()
+    )
+    rivalry_rows = (
+        db.query(
+            models.Player.id.label("co_id"),
+            func.sum(case((models.PlaySession.winner == player.name, 1), else_=0)).label("wins"),
+            func.sum(case((models.PlaySession.winner == models.Player.name, 1), else_=0)).label("losses"),
         )
-        wins = (
-            db.query(func.count())
-            .select_from(models.PlaySession)
-            .join(models.SessionPlayer, models.SessionPlayer.session_id == models.PlaySession.id)
-            .filter(
-                models.SessionPlayer.player_id == player_id,
-                models.PlaySession.winner == player.name,
-                models.PlaySession.winner.isnot(None),
-                models.PlaySession.id.in_(co_sessions),
-            )
-            .scalar() or 0
+        .select_from(models.Player)
+        .join(models.SessionPlayer, models.SessionPlayer.player_id == models.Player.id)
+        .join(models.PlaySession, models.PlaySession.id == models.SessionPlayer.session_id)
+        .filter(
+            models.SessionPlayer.session_id.in_(target_sessions),
+            models.Player.id != player_id,
+            models.PlaySession.winner.isnot(None),
         )
-        losses = (
-            db.query(func.count())
-            .select_from(models.PlaySession)
-            .join(models.SessionPlayer, models.SessionPlayer.session_id == models.PlaySession.id)
-            .filter(
-                models.SessionPlayer.player_id == player_id,
-                models.PlaySession.winner == c.name,
-                models.PlaySession.winner.isnot(None),
-                models.PlaySession.id.in_(co_sessions),
-            )
-            .scalar() or 0
-        )
-        rivalry_data[c.id] = (wins, losses)
+        .group_by(models.Player.id)
+        .all()
+    )
+    rivalry_data = {r.co_id: (int(r.wins or 0), int(r.losses or 0)) for r in rivalry_rows}
 
     return schemas.PlayerStatsResponse(
         session_count=session_count,
