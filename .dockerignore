@@ -1,0 +1,17 @@
+# Screenshots and documentation assets used only by the README
+docs/
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Git and CI metadata
+.git/
+.github/
+.gitignore
+
+# Dev/editor files
+.vscode/
+.env*
+__pycache__/
+*.pyc
