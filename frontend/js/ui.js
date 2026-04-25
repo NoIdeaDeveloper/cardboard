@@ -2408,7 +2408,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   const coolingOff = stats.shelf_warmers || [];
   const coolingOffHtml = coolingOff.length ? `
     <div class="stats-section" data-section="cooling_off"${!currentPrefs.show_cooling_off ? ' style="display:none"' : ''}>
-      ${_sectionInfoHeader(`Cooling Off (${coolingOff.length})`, 'About Cooling Off', '<p class="health-info-intro">Owned games you haven\'t played in 3+ months but less than a year. A nudge to bring them back to the table before they go fully dormant.</p>')}
+      ${_sectionInfoHeader('Cooling Off', 'About Cooling Off', '<p class="health-info-intro">Owned games you haven\'t played in 3–12 months — a nudge to bring them back to the table before they go fully dormant.</p>')}
       <p class="insight-subtext">Haven't played in a while</p>
       <div class="insight-game-list">
         ${coolingOff.map(g => `

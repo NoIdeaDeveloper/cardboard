@@ -29,7 +29,7 @@
   }
 
   function saveCollectionPrefs() {
-    localStorage.setItem(COLLECTION_PREFS_KEY, JSON.stringify({
+    saveJsonToStorage(COLLECTION_PREFS_KEY, {
       sortBy: state.sortBy, sortDir: state.sortDir,
       viewMode: state.viewMode, statusFilter: state.statusFilter,
       search: state.search,
@@ -39,7 +39,7 @@
       filterMechanics: state.filterMechanics,
       filterCategories: state.filterCategories,
       filterLocation: state.filterLocation,
-    }));
+    });
   }
 
   // ===== State helpers =====
@@ -1610,6 +1610,31 @@
     });
   }
 
+  // ===== Player Profile Chart Helpers =====
+
+  function _buildMonthWindow() {
+    const now = new Date();
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+      return {
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: d.toLocaleDateString(undefined, { month: 'short' }),
+      };
+    });
+  }
+
+  // Renders a player profile bar chart. Each month in `months` must have
+  // pre-computed `px` (bar height in pixels) and `tip` (tooltip string).
+  function _buildPlayerBarChart(title, months) {
+    return `<div class="player-profile-section-title">${title}</div>
+      <div class="player-sessions-chart">
+        ${months.map(m => `<div class="player-sessions-col" title="${escapeHtml(m.tip)}">
+          <div class="player-sessions-bar" style="height:${m.px}px"></div>
+          <div class="player-sessions-label">${m.label.charAt(0)}</div>
+        </div>`).join('')}
+      </div>`;
+  }
+
   // ===== Players Modal =====
   function bindPlayersModal() {
     const btn = document.getElementById('players-btn');
@@ -2067,35 +2092,22 @@
              </div>`
           : '';
 
-        // Sessions-by-month mini bar chart (last 12 months)
-        // Bar heights are in px (chart 56px - 10px label - 2px gap = 44px bar area)
+        const barAreaPx = 44;
+
         let sessionsByMonthHtml = '';
         if (stats.sessions_by_month && stats.sessions_by_month.length > 0) {
-          const now = new Date();
-          const months = Array.from({ length: 12 }, (_, i) => {
-            const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-            return { key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString(undefined, { month: 'short' }), count: 0 };
-          });
-          stats.sessions_by_month.forEach(r => {
-            const m = months.find(m => m.key === r.month);
-            if (m) m.count = r.count;
+          const months = _buildMonthWindow().map(m => {
+            const found = stats.sessions_by_month.find(r => r.month === m.key);
+            return { ...m, count: found ? found.count : 0 };
           });
           const maxCount = Math.max(...months.map(m => m.count), 1);
-          const barAreaPx = 44;
-          sessionsByMonthHtml = `
-            <div class="player-profile-section-title">Sessions (12 months)</div>
-            <div class="player-sessions-chart">
-              ${months.map(m => {
-                const px = m.count > 0 ? Math.max(3, Math.round((m.count / maxCount) * barAreaPx)) : 0;
-                return `<div class="player-sessions-col" title="${m.label}: ${m.count}">
-                  <div class="player-sessions-bar" style="height:${px}px"></div>
-                  <div class="player-sessions-label">${m.label.charAt(0)}</div>
-                </div>`;
-              }).join('')}
-            </div>`;
+          months.forEach(m => {
+            m.px  = m.count > 0 ? Math.max(3, Math.round(m.count / maxCount * barAreaPx)) : 0;
+            m.tip = `${m.label}: ${m.count}`;
+          });
+          sessionsByMonthHtml = _buildPlayerBarChart('Sessions (12 months)', months);
         }
 
-        // Recent form: last 10 decided sessions, newest-first
         const recentForm = stats.recent_form || [];
         const recentFormHtml = recentForm.length ? `
           <div class="player-profile-section-title">Recent Form</div>
@@ -2103,45 +2115,28 @@
             ${recentForm.map(r => `<span class="form-pip form-pip-${r === 'W' ? 'win' : 'loss'}" title="${r === 'W' ? 'Win' : 'Loss'}">${r}</span>`).join('')}
           </div>` : '';
 
-        // Current streak (W/L run from most recent backwards)
         const streak = stats.current_streak || { kind: '', length: 0 };
+        const streakLabel = streak.kind === 'W' ? 'win' : 'loss';
         const streakHtml = streak.length > 1 ? `
-          <div class="player-streak-line player-streak-${streak.kind === 'W' ? 'win' : 'loss'}">
-            ${streak.length} ${streak.kind === 'W' ? 'win' : 'loss'} streak
+          <div class="player-streak-line player-streak-${streakLabel}">
+            ${streak.length} ${streakLabel} streak
           </div>` : '';
 
-        // Win-rate trend: monthly win-rate over decided sessions, last 12 months
         let winRateTrendHtml = '';
-        const winRateMonthly = stats.win_rate_by_month || [];
-        if (winRateMonthly.length > 0) {
-          const now = new Date();
-          const months = Array.from({ length: 12 }, (_, i) => {
-            const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+        if (stats.win_rate_by_month && stats.win_rate_by_month.length > 0) {
+          const months = _buildMonthWindow().map(m => {
+            const found = stats.win_rate_by_month.find(r => r.month === m.key);
+            const winRate = found ? found.win_rate : null;
+            const sessions = found ? found.sessions : 0;
             return {
-              key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-              label: d.toLocaleDateString(undefined, { month: 'short' }),
-              winRate: null, sessions: 0,
+              ...m,
+              px:  winRate !== null ? Math.max(3, Math.round(winRate / 100 * barAreaPx)) : 0,
+              tip: winRate !== null
+                ? `${m.label}: ${winRate}% over ${pluralize(sessions, 'session')}`
+                : `${m.label}: no decided sessions`,
             };
           });
-          winRateMonthly.forEach(r => {
-            const m = months.find(m => m.key === r.month);
-            if (m) { m.winRate = r.win_rate; m.sessions = r.sessions; }
-          });
-          const barAreaPx = 44;
-          winRateTrendHtml = `
-            <div class="player-profile-section-title">Win Rate (12 months)</div>
-            <div class="player-sessions-chart">
-              ${months.map(m => {
-                const px = m.winRate !== null ? Math.max(3, Math.round((m.winRate / 100) * barAreaPx)) : 0;
-                const tip = m.winRate !== null
-                  ? `${m.label}: ${m.winRate}% over ${pluralize(m.sessions, 'session')}`
-                  : `${m.label}: no decided sessions`;
-                return `<div class="player-sessions-col" title="${escapeHtml(tip)}">
-                  <div class="player-sessions-bar" style="height:${px}px"></div>
-                  <div class="player-sessions-label">${m.label.charAt(0)}</div>
-                </div>`;
-              }).join('')}
-            </div>`;
+          winRateTrendHtml = _buildPlayerBarChart('Win Rate (12 months)', months);
         }
 
         // Co-players: show all, top 3 visible, rest collapsible

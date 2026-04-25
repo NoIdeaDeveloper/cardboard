@@ -321,10 +321,10 @@ def get_player_stats(player_id: int, db: Session = Depends(get_db)):
     )
     rivalry_data = {r.co_id: (int(r.wins or 0), int(r.losses or 0)) for r in rivalry_rows}
 
-    # Chronological decided-session history (winner recorded). Drives recent
-    # form, current streak, and monthly win-rate trend in one pass.
+    # Chronological decided-session history for streak and recent form.
+    # Streak can be arbitrarily long so no LIMIT applied; monthly rates use SQL.
     history_rows = (
-        db.query(models.PlaySession.played_at, models.PlaySession.winner)
+        db.query(models.PlaySession.winner)
         .join(models.SessionPlayer, models.SessionPlayer.session_id == models.PlaySession.id)
         .filter(
             models.SessionPlayer.player_id == player_id,
@@ -335,7 +335,7 @@ def get_player_stats(player_id: int, db: Session = Depends(get_db)):
     )
     wlseq = ["W" if r.winner == player.name else "L" for r in history_rows]
 
-    recent_form = list(reversed(wlseq[-10:]))  # newest-first
+    recent_form = list(reversed(wlseq[-10:]))
 
     streak_kind, streak_len = "", 0
     for result in reversed(wlseq):
@@ -347,20 +347,29 @@ def get_player_stats(player_id: int, db: Session = Depends(get_db)):
         else:
             break
 
-    month_total: dict[str, int] = {}
-    month_wins: dict[str, int] = {}
-    for r in history_rows:
-        key = r.played_at.strftime("%Y-%m")
-        month_total[key] = month_total.get(key, 0) + 1
-        if r.winner == player.name:
-            month_wins[key] = month_wins.get(key, 0) + 1
+    # Monthly win-rate via SQL aggregation — avoids loading all rows into Python.
+    month_rate_rows = (
+        db.query(
+            func.strftime("%Y-%m", models.PlaySession.played_at).label("month"),
+            func.count().label("total"),
+            func.sum(case((models.PlaySession.winner == player.name, 1), else_=0)).label("wins"),
+        )
+        .join(models.SessionPlayer, models.SessionPlayer.session_id == models.PlaySession.id)
+        .filter(
+            models.SessionPlayer.player_id == player_id,
+            models.PlaySession.winner.isnot(None),
+        )
+        .group_by("month")
+        .order_by("month")
+        .all()
+    )
     win_rate_by_month = [
         schemas.PlayerWinRateByMonth(
-            month=k,
-            win_rate=round(month_wins.get(k, 0) / month_total[k] * 100),
-            sessions=month_total[k],
+            month=r.month,
+            win_rate=round(r.wins / r.total * 100),
+            sessions=r.total,
         )
-        for k in sorted(month_total)
+        for r in month_rate_rows
     ]
 
     return schemas.PlayerStatsResponse(

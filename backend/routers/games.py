@@ -331,6 +331,17 @@ def build_game_responses(games: list, db: Session) -> list:
     return results
 
 
+def _tag_exists(pivot_model, pivot_fk_col, tag_model, name_expr):
+    """EXISTS subquery: game has at least one tag row matching name_expr."""
+    return exists().where(
+        and_(
+            pivot_model.game_id == models.Game.id,
+            pivot_fk_col == tag_model.id,
+            name_expr,
+        )
+    )
+
+
 @router.get("/")
 def get_games(
     request: Request,
@@ -373,27 +384,9 @@ def get_games(
             query = query.filter(
                 or_(
                     models.Game.name.ilike(like),
-                    exists().where(
-                        and_(
-                            models.GameDesigner.game_id == models.Game.id,
-                            models.GameDesigner.designer_id == models.Designer.id,
-                            models.Designer.name.ilike(like),
-                        )
-                    ),
-                    exists().where(
-                        and_(
-                            models.GameMechanic.game_id == models.Game.id,
-                            models.GameMechanic.mechanic_id == models.Mechanic.id,
-                            models.Mechanic.name.ilike(like),
-                        )
-                    ),
-                    exists().where(
-                        and_(
-                            models.GameCategory.game_id == models.Game.id,
-                            models.GameCategory.category_id == models.Category.id,
-                            models.Category.name.ilike(like),
-                        )
-                    ),
+                    _tag_exists(models.GameDesigner, models.GameDesigner.designer_id, models.Designer, models.Designer.name.ilike(like)),
+                    _tag_exists(models.GameMechanic, models.GameMechanic.mechanic_id, models.Mechanic, models.Mechanic.name.ilike(like)),
+                    _tag_exists(models.GameCategory, models.GameCategory.category_id, models.Category, models.Category.name.ilike(like)),
                 )
             )
 
@@ -432,16 +425,7 @@ def get_games(
             raise HTTPException(status_code=422, detail="Too many mechanics specified (max 50)")
         if mechanic_list:
             query = query.filter(
-                or_(*(
-                    exists().where(
-                        and_(
-                            models.GameMechanic.game_id == models.Game.id,
-                            models.GameMechanic.mechanic_id == models.Mechanic.id,
-                            models.Mechanic.name == m,
-                        )
-                    )
-                    for m in mechanic_list
-                ))
+                or_(*(_tag_exists(models.GameMechanic, models.GameMechanic.mechanic_id, models.Mechanic, models.Mechanic.name == m) for m in mechanic_list))
             )
 
     if location is not None:
@@ -456,16 +440,7 @@ def get_games(
             raise HTTPException(status_code=422, detail="Too many categories specified (max 50)")
         if category_list:
             query = query.filter(
-                or_(*(
-                    exists().where(
-                        and_(
-                            models.GameCategory.game_id == models.Game.id,
-                            models.GameCategory.category_id == models.Category.id,
-                            models.Category.name == c,
-                        )
-                    )
-                    for c in category_list
-                ))
+                or_(*(_tag_exists(models.GameCategory, models.GameCategory.category_id, models.Category, models.Category.name == c) for c in category_list))
             )
 
     SORT_COLUMNS = {
