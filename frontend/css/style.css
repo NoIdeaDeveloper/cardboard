@@ -4650,6 +4650,25 @@ img.player-profile-avatar { display: block; }
   .player-profile-stats { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* Recent form pips (W / L history, newest-first) */
+.player-recent-form { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
+.form-pip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 4px;
+  font-size: 0.7rem; font-weight: 700; color: #fff;
+}
+.form-pip-win  { background: var(--success, #2ea043); }
+.form-pip-loss { background: var(--danger,  #d2453d); }
+
+.player-streak-line {
+  display: inline-block;
+  font-size: 0.78rem; font-weight: 600;
+  padding: 3px 9px; border-radius: 999px;
+  margin-bottom: 8px;
+}
+.player-streak-win  { background: rgba(46, 160, 67, 0.16); color: var(--success, #2ea043); }
+.player-streak-loss { background: rgba(210, 69, 61, 0.16); color: var(--danger,  #d2453d); }
+
 /* ===== Share / Readonly ===== */
 .share-readonly-badge {
   display: inline-flex;

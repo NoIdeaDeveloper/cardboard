@@ -321,6 +321,48 @@ def get_player_stats(player_id: int, db: Session = Depends(get_db)):
     )
     rivalry_data = {r.co_id: (int(r.wins or 0), int(r.losses or 0)) for r in rivalry_rows}
 
+    # Chronological decided-session history (winner recorded). Drives recent
+    # form, current streak, and monthly win-rate trend in one pass.
+    history_rows = (
+        db.query(models.PlaySession.played_at, models.PlaySession.winner)
+        .join(models.SessionPlayer, models.SessionPlayer.session_id == models.PlaySession.id)
+        .filter(
+            models.SessionPlayer.player_id == player_id,
+            models.PlaySession.winner.isnot(None),
+        )
+        .order_by(models.PlaySession.played_at.asc(), models.PlaySession.id.asc())
+        .all()
+    )
+    wlseq = ["W" if r.winner == player.name else "L" for r in history_rows]
+
+    recent_form = list(reversed(wlseq[-10:]))  # newest-first
+
+    streak_kind, streak_len = "", 0
+    for result in reversed(wlseq):
+        if not streak_kind:
+            streak_kind = result
+            streak_len = 1
+        elif result == streak_kind:
+            streak_len += 1
+        else:
+            break
+
+    month_total: dict[str, int] = {}
+    month_wins: dict[str, int] = {}
+    for r in history_rows:
+        key = r.played_at.strftime("%Y-%m")
+        month_total[key] = month_total.get(key, 0) + 1
+        if r.winner == player.name:
+            month_wins[key] = month_wins.get(key, 0) + 1
+    win_rate_by_month = [
+        schemas.PlayerWinRateByMonth(
+            month=k,
+            win_rate=round(month_wins.get(k, 0) / month_total[k] * 100),
+            sessions=month_total[k],
+        )
+        for k in sorted(month_total)
+    ]
+
     return schemas.PlayerStatsResponse(
         session_count=session_count,
         win_count=win_count,
@@ -344,6 +386,9 @@ def get_player_stats(player_id: int, db: Session = Depends(get_db)):
             schemas.PlayerSessionsByMonth(month=r.month, count=r.count)
             for r in sessions_by_month_rows
         ],
+        recent_form=recent_form,
+        current_streak=schemas.PlayerStreak(kind=streak_kind, length=streak_len),
+        win_rate_by_month=win_rate_by_month,
     )
 
 

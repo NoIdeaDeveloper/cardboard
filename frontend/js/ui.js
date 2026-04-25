@@ -1902,11 +1902,11 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
     show_sessions_by_month: true, show_play_heatmap: true,
     show_sessions_by_dow: true, show_never_played: true,
     show_dormant: true, show_top_mechanics: true, show_collection_value: true,
-    show_milestones: true, show_goals: true,
+    show_milestones: true, show_goals: true, show_cooling_off: true,
     section_order: ['summary', 'most_played', 'top_players', 'recently_played', 'recently_added',
                     'ratings', 'labels', 'added_by_month', 'sessions_by_month', 'play_heatmap',
                     'sessions_by_dow',
-                    'never_played', 'dormant', 'top_mechanics', 'collection_value',
+                    'never_played', 'cooling_off', 'dormant', 'top_mechanics', 'collection_value',
                     'milestones', 'goals'],
   };
   let currentPrefs = { ...SECTION_DEFAULTS, ...prefs };
@@ -1925,6 +1925,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
     ['show_play_heatmap',      'Play Activity',      'play_heatmap'],
     ['show_sessions_by_dow',   'Day of Week',        'sessions_by_dow'],
     ['show_never_played',      'Shelf of Shame',     'never_played'],
+    ['show_cooling_off',        'Cooling Off',        'cooling_off'],
     ['show_dormant',           'Dormant Games',      'dormant'],
     ['show_top_mechanics',     'Top Mechanics',      'top_mechanics'],
     ['show_collection_value',  'Collection Value',   'collection_value'],
@@ -2402,6 +2403,22 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
         : `<p class="no-sessions">${games.filter(g => g.status === 'owned').length === 0 ? 'No owned games yet.' : 'All your owned games have been played!'}</p>`}
     </div>`;
 
+  // Cooling Off — owned base games not played in 90–365 days (server-computed,
+  // unaffected by collection pagination/filters).
+  const coolingOff = stats.shelf_warmers || [];
+  const coolingOffHtml = coolingOff.length ? `
+    <div class="stats-section" data-section="cooling_off"${!currentPrefs.show_cooling_off ? ' style="display:none"' : ''}>
+      ${_sectionInfoHeader(`Cooling Off (${coolingOff.length})`, 'About Cooling Off', '<p class="health-info-intro">Owned games you haven\'t played in 3+ months but less than a year. A nudge to bring them back to the table before they go fully dormant.</p>')}
+      <p class="insight-subtext">Haven't played in a while</p>
+      <div class="insight-game-list">
+        ${coolingOff.map(g => `
+          <div class="insight-game-row" data-game-id="${g.id}">
+            <span class="insight-game-name">${escapeHtml(g.name)}</span>
+            <span class="insight-game-meta">${g.days_since} days · last played ${escapeHtml(formatDate(g.last_played))}</span>
+          </div>`).join('')}
+      </div>
+    </div>` : '';
+
   // Dormant — owned games not played in 12+ months
   const twelveMonthsAgo = new Date();
   twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
@@ -2726,6 +2743,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
     play_heatmap:      playHeatmapHtml,
     sessions_by_dow:   sessionsByDowHtml,
     never_played:      neverPlayedHtml,
+    cooling_off:       coolingOffHtml,
     dormant:           dormantHtml,
     top_mechanics:     topMechanicsHtml,
     collection_value:  collectionValueHtml,

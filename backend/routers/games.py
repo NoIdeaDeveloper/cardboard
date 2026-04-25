@@ -361,7 +361,41 @@ def get_games(
         query = query.filter(models.Game.parent_game_id.is_(None))
 
     if search:
-        query = query.filter(models.Game.name.ilike(f"%{search}%"))
+        # Split into tokens so "deck building" matches a "Deck Building" mechanic
+        # and "catan" inside "Settlers of Catan" still works. Tokens shorter than
+        # 2 chars are dropped as noise (stop words like "of", "a"). Cap to 8 tokens
+        # to bound the per-token EXISTS subquery cost.
+        tokens = [t for t in search.split() if len(t) >= 2][:8]
+        if not tokens and search.strip():
+            tokens = [search.strip()]  # all-short input — fall back to whole string
+        for token in tokens:
+            like = f"%{token}%"
+            query = query.filter(
+                or_(
+                    models.Game.name.ilike(like),
+                    exists().where(
+                        and_(
+                            models.GameDesigner.game_id == models.Game.id,
+                            models.GameDesigner.designer_id == models.Designer.id,
+                            models.Designer.name.ilike(like),
+                        )
+                    ),
+                    exists().where(
+                        and_(
+                            models.GameMechanic.game_id == models.Game.id,
+                            models.GameMechanic.mechanic_id == models.Mechanic.id,
+                            models.Mechanic.name.ilike(like),
+                        )
+                    ),
+                    exists().where(
+                        and_(
+                            models.GameCategory.game_id == models.Game.id,
+                            models.GameCategory.category_id == models.Category.id,
+                            models.Category.name.ilike(like),
+                        )
+                    ),
+                )
+            )
 
     if status:
         query = query.filter(models.Game.status == status)

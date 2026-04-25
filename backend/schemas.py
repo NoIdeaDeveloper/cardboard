@@ -248,6 +248,17 @@ class PlayerSessionsByMonth(BaseModel):
     count: int
 
 
+class PlayerWinRateByMonth(BaseModel):
+    month: str         # "YYYY-MM"
+    win_rate: int      # 0-100, only over sessions with a recorded winner
+    sessions: int      # how many decided sessions in this month
+
+
+class PlayerStreak(BaseModel):
+    kind: str          # "W", "L", or "" if no decided sessions yet
+    length: int        # consecutive results from most recent backwards
+
+
 class PlayerStatsResponse(BaseModel):
     session_count: int
     win_count: int
@@ -255,6 +266,10 @@ class PlayerStatsResponse(BaseModel):
     top_games: List['PlayerTopGame'] = []
     most_played_with: List['PlayerCoPlayer'] = []
     sessions_by_month: List['PlayerSessionsByMonth'] = []
+    # Decided sessions only (winner field non-null) for the next three:
+    recent_form: List[str] = []                                # ≤10 results, newest-first
+    current_streak: PlayerStreak = Field(default_factory=lambda: PlayerStreak(kind="", length=0))
+    win_rate_by_month: List[PlayerWinRateByMonth] = []
 
 
 GOAL_TYPES = frozenset({
@@ -409,6 +424,13 @@ class SessionsByDayEntry(BaseModel):
     game_ids: List[int] = []
 
 
+class ShelfWarmerEntry(BaseModel):
+    id: int
+    name: str
+    last_played: date
+    days_since: int
+
+
 class StatsResponse(BaseModel):
     total_games: int
     by_status: Dict[str, int]
@@ -430,3 +452,4 @@ class StatsResponse(BaseModel):
     sessions_by_dow: List[SessionsByDowEntry] = []
     sessions_by_day: List[SessionsByDayEntry] = []
     collection_value: CollectionValueStats = Field(default_factory=CollectionValueStats)
+    shelf_warmers: List[ShelfWarmerEntry] = []

@@ -171,6 +171,45 @@ def test_list_games_search(client):
     assert "Monopoly" not in names
 
 
+def test_list_games_search_matches_designer(client):
+    _create_game(client, name="Wingspan", designers='["Elizabeth Hargrave"]')
+    _create_game(client, name="Monopoly")
+    r = client.get("/api/games/?search=hargrave")
+    assert r.status_code == 200
+    names = [g["name"] for g in r.json()]
+    assert "Wingspan" in names
+    assert "Monopoly" not in names
+
+
+def test_list_games_search_matches_mechanic(client):
+    _create_game(client, name="Dominion", mechanics='["Deck Building"]')
+    _create_game(client, name="Monopoly", mechanics='["Roll and Move"]')
+    r = client.get("/api/games/?search=deck%20building")
+    assert r.status_code == 200
+    names = [g["name"] for g in r.json()]
+    assert "Dominion" in names
+    assert "Monopoly" not in names
+
+
+def test_list_games_search_matches_category(client):
+    _create_game(client, name="Twilight Imperium", categories='["Space Exploration"]')
+    _create_game(client, name="Monopoly", categories='["Economic"]')
+    r = client.get("/api/games/?search=space")
+    names = [g["name"] for g in r.json()]
+    assert "Twilight Imperium" in names
+    assert "Monopoly" not in names
+
+
+def test_list_games_search_drops_short_stopwords(client):
+    """Tokens shorter than 2 chars (e.g. 'a', 'I') don't break the search."""
+    _create_game(client, name="Settlers of Catan")
+    _create_game(client, name="Monopoly")
+    r = client.get("/api/games/?search=a%20catan")
+    names = [g["name"] for g in r.json()]
+    assert "Settlers of Catan" in names
+    assert "Monopoly" not in names
+
+
 def test_list_games_contains_multiple_statuses(client):
     _create_game(client, name="Owned Game", status="owned")
     _create_game(client, name="Wishlist Game", status="wishlist")

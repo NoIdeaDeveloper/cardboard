@@ -7,18 +7,38 @@
 
   // ===== Collection Prefs =====
   const COLLECTION_PREFS_KEY = 'cardboard_collection_prefs';
-  const COLLECTION_PREFS_DEFAULTS = { sortBy: 'name', sortDir: 'asc', viewMode: 'grid', statusFilter: 'owned' };
+  const COLLECTION_PREFS_DEFAULTS = {
+    sortBy: 'name', sortDir: 'asc', viewMode: 'grid', statusFilter: 'owned',
+    search: '',
+    filterNeverPlayed: false,
+    filterPlayers: null,
+    filterTime: null,
+    filterMechanics: [],
+    filterCategories: [],
+    filterLocation: null,
+  };
   // Mirrors NO_LOCATION_SENTINEL in backend/constants.py.
   const NO_LOCATION_SENTINEL = '__none__';
 
   function loadCollectionPrefs() {
-    return { ...COLLECTION_PREFS_DEFAULTS, ...loadJsonFromStorage(COLLECTION_PREFS_KEY, {}) };
+    const raw = { ...COLLECTION_PREFS_DEFAULTS, ...loadJsonFromStorage(COLLECTION_PREFS_KEY, {}) };
+    // Defensive coercion: localStorage can be edited by users / older versions.
+    if (!Array.isArray(raw.filterMechanics))  raw.filterMechanics  = [];
+    if (!Array.isArray(raw.filterCategories)) raw.filterCategories = [];
+    return raw;
   }
 
   function saveCollectionPrefs() {
     localStorage.setItem(COLLECTION_PREFS_KEY, JSON.stringify({
       sortBy: state.sortBy, sortDir: state.sortDir,
       viewMode: state.viewMode, statusFilter: state.statusFilter,
+      search: state.search,
+      filterNeverPlayed: state.filterNeverPlayed,
+      filterPlayers: state.filterPlayers,
+      filterTime: state.filterTime,
+      filterMechanics: state.filterMechanics,
+      filterCategories: state.filterCategories,
+      filterLocation: state.filterLocation,
     }));
   }
 
@@ -71,14 +91,14 @@
     viewMode: _cp.viewMode,
     sortBy: _cp.sortBy,
     sortDir: _cp.sortDir,
-    search: '',
+    search: _cp.search,
     statusFilter: _cp.statusFilter,
-    filterNeverPlayed: false,
-    filterPlayers: null,
-    filterTime: null,
-    filterMechanics: [],
-    filterCategories: [],
-    filterLocation: null,
+    filterNeverPlayed: _cp.filterNeverPlayed,
+    filterPlayers: _cp.filterPlayers,
+    filterTime: _cp.filterTime,
+    filterMechanics: _cp.filterMechanics,
+    filterCategories: _cp.filterCategories,
+    filterLocation: _cp.filterLocation,
     showExpansions: false,
     bulkMode: false,
     selectedGameIds: new Set(),
@@ -142,6 +162,20 @@
     document.querySelectorAll('#status-pills .pill').forEach(pill => {
       pill.classList.toggle('active', pill.dataset.status === state.statusFilter);
     });
+
+    // Restore filter UI from persisted prefs
+    const searchInput = document.getElementById('collection-search');
+    const clearBtn    = document.getElementById('clear-search');
+    if (searchInput && state.search) {
+      searchInput.value = state.search;
+      if (clearBtn) clearBtn.style.display = 'flex';
+    }
+    const neverBtn  = document.getElementById('filter-never-played');
+    const playersEl = document.getElementById('filter-players');
+    const timeEl    = document.getElementById('filter-time');
+    if (neverBtn)  neverBtn.classList.toggle('active', state.filterNeverPlayed);
+    if (playersEl) playersEl.value = state.filterPlayers ?? '';
+    if (timeEl)    timeEl.value = state.filterTime ?? '';
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -170,6 +204,7 @@
       switchView('stats');
     });
     syncCollectionUI();
+    syncFilterActiveBar();
     // Load players for autocomplete (non-blocking)
     API.getPlayers().then(p => { state.players = p.map(pl => pl.name); state.playerObjects = p; }).catch(err => {
       console.warn('Failed to load players for autocomplete:', err);
@@ -266,6 +301,7 @@
       state.search = searchInput.value;
       clearBtn.style.display = state.search ? 'flex' : 'none';
       clearBulkSelection();
+      saveCollectionPrefs();
       debouncedSearchLoad();
     });
 
@@ -274,6 +310,7 @@
       state.search = '';
       clearBtn.style.display = 'none';
       clearBulkSelection();
+      saveCollectionPrefs();
       loadCollection();
     });
 
@@ -2058,6 +2095,55 @@
             </div>`;
         }
 
+        // Recent form: last 10 decided sessions, newest-first
+        const recentForm = stats.recent_form || [];
+        const recentFormHtml = recentForm.length ? `
+          <div class="player-profile-section-title">Recent Form</div>
+          <div class="player-recent-form">
+            ${recentForm.map(r => `<span class="form-pip form-pip-${r === 'W' ? 'win' : 'loss'}" title="${r === 'W' ? 'Win' : 'Loss'}">${r}</span>`).join('')}
+          </div>` : '';
+
+        // Current streak (W/L run from most recent backwards)
+        const streak = stats.current_streak || { kind: '', length: 0 };
+        const streakHtml = streak.length > 1 ? `
+          <div class="player-streak-line player-streak-${streak.kind === 'W' ? 'win' : 'loss'}">
+            ${streak.length} ${streak.kind === 'W' ? 'win' : 'loss'} streak
+          </div>` : '';
+
+        // Win-rate trend: monthly win-rate over decided sessions, last 12 months
+        let winRateTrendHtml = '';
+        const winRateMonthly = stats.win_rate_by_month || [];
+        if (winRateMonthly.length > 0) {
+          const now = new Date();
+          const months = Array.from({ length: 12 }, (_, i) => {
+            const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+            return {
+              key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+              label: d.toLocaleDateString(undefined, { month: 'short' }),
+              winRate: null, sessions: 0,
+            };
+          });
+          winRateMonthly.forEach(r => {
+            const m = months.find(m => m.key === r.month);
+            if (m) { m.winRate = r.win_rate; m.sessions = r.sessions; }
+          });
+          const barAreaPx = 44;
+          winRateTrendHtml = `
+            <div class="player-profile-section-title">Win Rate (12 months)</div>
+            <div class="player-sessions-chart">
+              ${months.map(m => {
+                const px = m.winRate !== null ? Math.max(3, Math.round((m.winRate / 100) * barAreaPx)) : 0;
+                const tip = m.winRate !== null
+                  ? `${m.label}: ${m.winRate}% over ${pluralize(m.sessions, 'session')}`
+                  : `${m.label}: no decided sessions`;
+                return `<div class="player-sessions-col" title="${escapeHtml(tip)}">
+                  <div class="player-sessions-bar" style="height:${px}px"></div>
+                  <div class="player-sessions-label">${m.label.charAt(0)}</div>
+                </div>`;
+              }).join('')}
+            </div>`;
+        }
+
         // Co-players: show all, top 3 visible, rest collapsible
         const coPlayersAll = stats.most_played_with;
         const coPlayersVisible = coPlayersAll.slice(0, 3);
@@ -2103,7 +2189,10 @@
               <span class="player-profile-stat-label">Last Played</span>
             </div>
           </div>
+          ${streakHtml}
+          ${recentFormHtml}
           ${sessionsByMonthHtml}
+          ${winRateTrendHtml}
           ${topGamesHtml}
           ${mostWithHtml}`;
 
@@ -2465,6 +2554,7 @@
             btn.classList.add('active');
           }
           clearBulkSelection();
+          saveCollectionPrefs();
           scheduleFilteredLoad();
         });
         container.appendChild(btn);
@@ -2495,6 +2585,7 @@
           buttons.forEach(b => b.classList.remove('active'));
           if (becomingActive) btn.classList.add('active');
           clearBulkSelection();
+          saveCollectionPrefs();
           scheduleFilteredLoad();
           syncFilterActiveBar();
         });
@@ -2538,6 +2629,7 @@
       state.filterNeverPlayed = !state.filterNeverPlayed;
       neverBtn.classList.toggle('active', state.filterNeverPlayed);
       clearBulkSelection();
+      saveCollectionPrefs();
       scheduleFilteredLoad();
     });
 
@@ -2548,6 +2640,7 @@
       playerDebounce = setTimeout(() => {
         state.filterPlayers = playersEl.value ? parseInt(playersEl.value, 10) : null;
         clearBulkSelection();
+        saveCollectionPrefs();
         scheduleFilteredLoad();
       }, 300);
     });
@@ -2557,6 +2650,7 @@
       timeDebounce = setTimeout(() => {
         state.filterTime = timeEl.value ? parseInt(timeEl.value, 10) : null;
         clearBulkSelection();
+        saveCollectionPrefs();
         scheduleFilteredLoad();
       }, 300);
     });
@@ -2568,6 +2662,7 @@
       state.filterMechanics = [];
       state.filterCategories = [];
       state.filterLocation = null;
+      saveCollectionPrefs();
       neverBtn.classList.remove('active');
       playersEl.value = '';
       timeEl.value = '';

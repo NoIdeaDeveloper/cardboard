@@ -363,6 +363,32 @@ def get_stats(db: Session = Depends(get_db)):
         for r in day_rows
     ]
 
+    # ── Shelf warmers (owned base games last played 90–365 days ago) ─────────
+    # Sits between "recently played" and the 12+ month "Dormant" section: an
+    # actionable nudge for games cooling off but not yet abandoned.
+    shelf_cold = today - timedelta(days=90)
+    shelf_dormant = today - timedelta(days=365)
+    shelf_rows = (
+        db.query(models.Game.id, models.Game.name, models.Game.last_played)
+        .filter(
+            models.Game.status == "owned",
+            models.Game.parent_game_id.is_(None),
+            models.Game.last_played.isnot(None),
+            models.Game.last_played < shelf_cold,
+            models.Game.last_played >= shelf_dormant,
+        )
+        .order_by(models.Game.last_played.asc())
+        .limit(5)
+        .all()
+    )
+    shelf_warmers = [
+        schemas.ShelfWarmerEntry(
+            id=r.id, name=r.name, last_played=r.last_played,
+            days_since=(today - r.last_played).days,
+        )
+        for r in shelf_rows
+    ]
+
     logger.info("Stats computed: %d games, %d sessions, %d expansions", total_games, total_sessions, total_expansions)
 
     return schemas.StatsResponse(
@@ -386,6 +412,7 @@ def get_stats(db: Session = Depends(get_db)):
         sessions_by_dow=sessions_by_dow,
         sessions_by_day=sessions_by_day,
         collection_value=collection_value,
+        shelf_warmers=shelf_warmers,
     )
 
 
