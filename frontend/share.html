@@ -118,6 +118,12 @@
       requestAnimationFrame(() => toast.classList.add('show'));
       setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 3500);
     }
+    function imgFallback(img) {
+      const div = document.createElement('div');
+      div.className = 'placeholder-image';
+      div.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>';
+      img.parentNode.replaceChild(div, img);
+    }
     function renderStars(rating) {
       if (!rating) return '';
       const filled = Math.round(rating);
@@ -174,7 +180,7 @@
         </div>` : '';
       el.innerHTML = `
         <div class="game-card-image">
-          ${game.image_url ? `<img src="${escapeHtml(game.image_url)}" alt="" loading="lazy">` : '<div class="placeholder-image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>'}
+          ${game.image_url ? `<img src="${escapeHtml(game.image_url)}" alt="" loading="lazy" onerror="imgFallback(this)">` : '<div class="placeholder-image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>'}
         </div>
         <div class="game-card-body">
           <div class="game-card-title-row">
@@ -292,6 +298,16 @@
       }
 
       inner.querySelector('#share-modal-close').addEventListener('click', closeGameDetail);
+
+      const heroImg = inner.querySelector('.modal-hero-image');
+      if (heroImg) {
+        heroImg.addEventListener('error', () => {
+          const ph = document.createElement('div');
+          ph.className = 'modal-hero-placeholder';
+          ph.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>';
+          heroImg.replaceWith(ph);
+        });
+      }
 
       // Want to Play
       const wtpBtn = inner.querySelector('#want-to-play-btn');

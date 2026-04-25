@@ -113,12 +113,14 @@ class GameUpdate(BaseModel):
 class GameResponse(GameBase):
     id: int
     image_cached: bool = False
+    image_ext: Optional[str] = None
     image_cache_status: Optional[str] = None  # null | "pending" | "cached" | "failed"
     date_added: Optional[datetime] = None
     date_modified: Optional[datetime] = None
     parent_game_name: Optional[str] = None  # denormalized — joined in GET
     heat_level: int = 0        # 0–3, computed from last_played
     expansion_count: int = 0   # number of direct child games
+    session_count: int = 0     # total logged play sessions
 
     model_config = ConfigDict(from_attributes=True)
 

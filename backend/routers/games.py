@@ -320,6 +320,14 @@ def build_game_responses(games: list, db: Session) -> list:
     )
     expansion_counts = {pid: cnt for pid, cnt in exp_rows}
 
+    session_rows = (
+        db.query(models.PlaySession.game_id, func.count(models.PlaySession.id))
+        .filter(models.PlaySession.game_id.in_(game_ids))
+        .group_by(models.PlaySession.game_id)
+        .all()
+    )
+    session_counts = {gid: cnt for gid, cnt in session_rows}
+
     results = []
     for g in games:
         row = schemas.GameResponse.model_validate(g)
@@ -327,6 +335,7 @@ def build_game_responses(games: list, db: Session) -> list:
             row.parent_game_name = parent_names.get(g.parent_game_id)
         row.heat_level = _heat_level(g.last_played)
         row.expansion_count = expansion_counts.get(g.id, 0)
+        row.session_count = session_counts.get(g.id, 0)
         results.append(row)
     return results
 
@@ -634,6 +643,12 @@ def export_static_html(db: Session = Depends(get_db)):
                     game_data['image_url'] = f"data:{mime};base64,{b64}"
                 except Exception as exc:
                     logger.warning("Failed to embed image for game %s: %s", game_id, exc)
+                    game_data['image_url'] = None
+            else:
+                game_data['image_url'] = None
+        # Any remaining /api/ URL is a server-relative path that won't work offline
+        elif (game_data.get('image_url') or '').startswith('/api/'):
+            game_data['image_url'] = None
         game_data.pop('image_cached', None)
         game_data.pop('image_ext', None)
         game_data.pop('image_cache_status', None)
