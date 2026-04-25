@@ -77,6 +77,8 @@ def get_shared_games(token: str, db: Session = Depends(get_db)):
 def get_shared_game(token: str, game_id: int, db: Session = Depends(get_db)):
     _validate_token(token, db)
     game = get_game_or_404(game_id, db)
+    if game.share_hidden:
+        raise HTTPException(status_code=404, detail="Game not found")
     _load_tags([game], db)
     return _attach_parent_name(game, db)
 
@@ -90,6 +92,8 @@ def submit_want_to_play(
 ):
     _validate_token(token, db)
     game = get_game_or_404(game_id, db)
+    if game.share_hidden:
+        raise HTTPException(status_code=404, detail="Game not found")
     req = models.WantToPlayRequest(
         token=token,
         game_id=game_id,

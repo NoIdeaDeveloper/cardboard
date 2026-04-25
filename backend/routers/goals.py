@@ -9,7 +9,7 @@ from sqlalchemy import func
 from database import get_db
 import models
 import schemas
-from utils import get_goal_or_404, parse_json_list
+from utils import get_goal_or_404
 
 logger = logging.getLogger("cardboard.goals")
 router = APIRouter(prefix="/api/goals", tags=["goals"])
@@ -49,15 +49,13 @@ def _compute_current_value(goal: models.Goal, db: Session) -> int:
         )
 
     elif goal.type == "unique_mechanics":
-        rows = (
-            db.query(models.Game.mechanics)
-            .filter(models.Game.status == "owned", models.Game.mechanics.isnot(None))
-            .all()
+        return (
+            db.query(func.count(func.distinct(models.Mechanic.id)))
+            .join(models.GameMechanic, models.GameMechanic.mechanic_id == models.Mechanic.id)
+            .join(models.Game, models.Game.id == models.GameMechanic.game_id)
+            .filter(models.Game.status == "owned")
+            .scalar() or 0
         )
-        mechanics_set = set()
-        for (mech_json,) in rows:
-            mechanics_set.update(parse_json_list(mech_json))
-        return len(mechanics_set)
 
     elif goal.type == "unique_games_year":
         year = goal.year or datetime.now(timezone.utc).year
