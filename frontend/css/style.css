@@ -2247,12 +2247,6 @@ input[type="date"] { color-scheme: dark; }
 
 .modal-actions-right { display: flex; gap: 8px; }
 
-/* ===== Share Panel ===== */
-.game-share-panel { display: flex; flex-direction: column; gap: 12px; }
-.share-section { display: flex; flex-direction: column; gap: 8px; }
-.share-buttons-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.share-unavailable { color: var(--text-muted); font-size: 0.875rem; margin: 0; }
-
 /* ===== Coach Mark Tour ===== */
 .tour-overlay {
   position: fixed;

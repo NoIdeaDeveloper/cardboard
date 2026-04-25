@@ -694,8 +694,6 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
       ${gallerySectionHtml}
       ${instructionsSectionHtml}
 
-      <div class="modal-section game-share-section" id="game-share-section" style="display:none"></div>
-
       <div class="modal-section">
         <div class="section-label-row">
           <div class="section-label">Play History</div>
@@ -1014,19 +1012,7 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
 
     const shareGameBtn = el.querySelector('#share-game-btn');
     if (shareGameBtn) {
-      shareGameBtn.addEventListener('click', () => {
-        const section = el.querySelector('#game-share-section');
-        if (section.style.display === 'none') {
-          section.style.display = '';
-          if (!section.dataset.built) {
-            section.dataset.built = '1';
-            const panel = buildGameSharePanel(game, { onGetShareUrl: onShareGame });
-            section.appendChild(panel);
-          }
-        } else {
-          section.style.display = 'none';
-        }
-      });
+      shareGameBtn.addEventListener('click', () => shareGameCard(game));
     }
 
     const refreshBggBtn = el.querySelector('#refresh-bgg-btn');
@@ -2906,102 +2892,31 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   return el;
 }
 
-// ===== Game Share Panel =====
+// ===== Game Share =====
 
-const _SHARE_WA_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" style="margin-right:5px;vertical-align:middle"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.5 2C6.262 2 2 6.262 2 11.5c0 1.865.518 3.609 1.42 5.101L2 22l5.578-1.395A9.45 9.45 0 0 0 11.5 21C16.738 21 21 16.738 21 11.5S16.738 2 11.5 2zm0 17.25a7.73 7.73 0 0 1-3.944-1.076l-.283-.168-2.933.733.766-2.855-.185-.295A7.718 7.718 0 0 1 3.75 11.5C3.75 7.226 7.226 3.75 11.5 3.75S19.25 7.226 19.25 11.5 15.774 19.25 11.5 19.25z"/></svg>`;
-const _SHARE_SIGNAL_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="margin-right:5px;vertical-align:middle"><path d="M4 12v1a8 8 0 0 0 8 8h1"/><path d="M20 12v-1a8 8 0 0 0-8-8h-1"/><path d="M12 4V2"/><path d="M12 22v-2"/><path d="M4.93 4.93l-1.42-1.42"/><path d="M19.07 4.93l1.42-1.42"/><path d="M20.49 17.66l1.41 1.41"/><path d="M3.51 17.66l-1.41 1.41"/></svg>`;
+async function shareGameCard(game) {
+  const players = (game.min_players || game.max_players) ? formatPlayers(game.min_players, game.max_players) : null;
+  const playtime = (game.min_playtime || game.max_playtime) ? formatPlaytime(game.min_playtime, game.max_playtime) : null;
+  const stats = [players, playtime].filter(Boolean).join(' · ');
 
-async function _shareViaWhatsApp(getUrl, buildMsg) {
+  const descSnippet = game.description
+    ? (game.description.length > 280 ? game.description.slice(0, 277).trimEnd() + '…' : game.description)
+    : null;
+
+  const lines = [game.name];
+  if (stats) lines.push(stats);
+  if (descSnippet) lines.push('', descSnippet);
+  if (game.image_url) lines.push('', game.image_url);
+  const text = lines.join('\n');
+
   try {
-    const url = await getUrl();
-    if (!url) return;
-    window.open('https://wa.me/?text=' + encodeURIComponent(buildMsg(url)), '_blank');
-  } catch (e) {
-    showToast('Could not create share link.', 'error');
-  }
-}
-
-async function _shareViaSignal(getUrl, buildMsg, title) {
-  try {
-    const url = await getUrl();
-    if (!url) return;
-    const text = buildMsg(url);
     if (navigator.share) {
-      navigator.share({ title, text }).catch(() => {});
+      await navigator.share({ title: game.name, text });
     } else {
       await navigator.clipboard.writeText(text);
-      showToast('Link copied — paste into Signal to share.', 'info');
+      showToast('Game info copied to clipboard.', 'success');
     }
   } catch (e) {
-    showToast('Could not create share link.', 'error');
+    if (e.name !== 'AbortError') showToast('Could not share game.', 'error');
   }
-}
-
-function buildGameSharePanel(game, { onGetShareUrl = null } = {}) {
-  const panel = document.createElement('div');
-  panel.className = 'game-share-panel';
-
-  function buildRichMessage(shareUrl) {
-    const players = (game.min_players || game.max_players) ? formatPlayers(game.min_players, game.max_players) : null;
-    const playtime = (game.min_playtime || game.max_playtime) ? formatPlaytime(game.min_playtime, game.max_playtime) + ' min' : null;
-    const stats = [players, playtime].filter(Boolean).join(' | ');
-    const ratingLine = game.user_rating ? `\nRating: ${game.user_rating}/10` : '';
-    const imgLine = game.image_url ? `\n${game.image_url}` : '';
-    return `Check out *${game.name}* from my board game collection!\n\n${stats}${ratingLine}${imgLine}\n\n${shareUrl}`;
-  }
-
-  function buildBggMessage(bggUrl) {
-    return `Check out *${game.name}* on BoardGameGeek!\n\n${bggUrl}`;
-  }
-
-  // Memoize the share URL so clicking both buttons doesn't trigger two API calls
-  let cachedShareUrl = null;
-  const getShareUrl = onGetShareUrl ? async () => {
-    if (!cachedShareUrl) cachedShareUrl = await onGetShareUrl();
-    return cachedShareUrl;
-  } : null;
-
-  let html = '';
-
-  if (getShareUrl) {
-    html += `
-      <div class="share-section">
-        <div class="section-label">Share from My Collection</div>
-        <div class="share-buttons-row">
-          <button class="btn btn-secondary share-collection-wa-btn">${_SHARE_WA_ICON}WhatsApp</button>
-          <button class="btn btn-secondary share-collection-signal-btn">${_SHARE_SIGNAL_ICON}Signal</button>
-        </div>
-      </div>`;
-  }
-
-  if (game.bgg_id) {
-    html += `
-      <div class="share-section">
-        <div class="section-label">Share BGG Page</div>
-        <div class="share-buttons-row">
-          <button class="btn btn-secondary share-bgg-wa-btn">${_SHARE_WA_ICON}WhatsApp</button>
-          <button class="btn btn-secondary share-bgg-signal-btn">${_SHARE_SIGNAL_ICON}Signal</button>
-        </div>
-      </div>`;
-  }
-
-  panel.innerHTML = html;
-
-  const bggUrl = game.bgg_id ? `https://boardgamegeek.com/boardgame/${game.bgg_id}` : null;
-
-  if (getShareUrl) {
-    panel.querySelector('.share-collection-wa-btn')?.addEventListener('click', () =>
-      _shareViaWhatsApp(getShareUrl, buildRichMessage));
-    panel.querySelector('.share-collection-signal-btn')?.addEventListener('click', () =>
-      _shareViaSignal(getShareUrl, buildRichMessage, game.name));
-  }
-
-  if (bggUrl) {
-    panel.querySelector('.share-bgg-wa-btn')?.addEventListener('click', () =>
-      _shareViaWhatsApp(() => Promise.resolve(bggUrl), buildBggMessage));
-    panel.querySelector('.share-bgg-signal-btn')?.addEventListener('click', () =>
-      _shareViaSignal(() => Promise.resolve(bggUrl), buildBggMessage, game.name + ' on BoardGameGeek'));
-  }
-
-  return panel;
 }
