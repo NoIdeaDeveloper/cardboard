@@ -1863,15 +1863,93 @@
       });
     }
 
+    const _AVATAR_PRESETS = [
+      { id: 'meeple', label: 'Meeple' },
+      { id: 'dice',   label: 'Dice'   },
+      { id: 'robot',  label: 'Robot'  },
+      { id: 'crown',  label: 'Crown'  },
+      { id: 'cat',    label: 'Cat'    },
+      { id: 'fox',    label: 'Fox'    },
+      { id: 'bear',   label: 'Bear'   },
+      { id: 'knight', label: 'Knight' },
+    ];
+
     function _buildProfileAvatarWrap(player) {
+      const hasAvatar = !!(player.avatar_url || player.avatar_preset);
       return `<div class="player-avatar-wrap player-profile-avatar-wrap">
         ${renderPlayerAvatar(player, 'player-profile-avatar')}
-        <label class="avatar-upload-trigger" title="${player.avatar_url ? 'Change photo' : 'Upload photo'}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          <input type="file" class="avatar-file-input" accept=".jpg,.jpeg,.png,.webp,.gif" hidden>
-        </label>
-        ${player.avatar_url ? '<button class="avatar-delete-btn" title="Remove photo" type="button">×</button>' : ''}
+        <div class="avatar-controls-overlay">
+          <label class="avatar-ctrl-btn" title="Upload photo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            <input type="file" class="avatar-file-input" accept=".jpg,.jpeg,.png,.webp,.gif" hidden>
+          </label>
+          <button class="avatar-ctrl-btn avatar-preset-trigger" title="Choose avatar" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          </button>
+        </div>
+        ${hasAvatar ? '<button class="avatar-delete-btn" title="Remove avatar" type="button">×</button>' : ''}
       </div>`;
+    }
+
+    function _openAvatarPicker(panel, player) {
+      _closeAvatarPicker(panel);
+      const wrap = panel.querySelector('.player-profile-avatar-wrap');
+      if (!wrap) return;
+      const rect = wrap.getBoundingClientRect();
+
+      const picker = document.createElement('div');
+      picker.className = 'avatar-preset-popover';
+      _AVATAR_PRESETS.forEach(p => {
+        const img = document.createElement('img');
+        img.src = `/avatars/${p.id}.svg`;
+        img.className = 'avatar-preset-item' + (player.avatar_preset === p.id ? ' active' : '');
+        img.title = p.label;
+        img.loading = 'lazy';
+        img.addEventListener('click', () => _applyAvatarPreset(panel, player, p.id));
+        picker.appendChild(img);
+      });
+      picker.style.cssText = `position:fixed;top:${rect.bottom + 8}px;left:${rect.left + rect.width / 2}px;transform:translateX(-50%);z-index:9999;`;
+      document.body.appendChild(picker);
+      panel._avatarPicker = picker;
+
+      const onOutside = e => {
+        if (!picker.contains(e.target) && !e.target.closest('.avatar-preset-trigger')) {
+          _closeAvatarPicker(panel);
+          document.removeEventListener('click', onOutside, true);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', onOutside, true), 0);
+      picker._onOutside = onOutside;
+    }
+
+    function _closeAvatarPicker(panel) {
+      if (panel._avatarPicker) {
+        if (panel._avatarPicker._onOutside) {
+          document.removeEventListener('click', panel._avatarPicker._onOutside, true);
+        }
+        panel._avatarPicker.remove();
+        panel._avatarPicker = null;
+      }
+    }
+
+    async function _applyAvatarPreset(panel, player, presetId) {
+      _closeAvatarPicker(panel);
+      try {
+        const updated = await API.setPlayerAvatarPreset(player.id, presetId);
+        _syncPlayerAvatar(panel, player, updated);
+        showToast('Avatar updated', 'success');
+      } catch (err) {
+        showToast(`Failed to set avatar: ${classifyError(err)}`, 'error');
+      }
+    }
+
+    function _syncPlayerAvatar(panel, player, updated) {
+      player.avatar_url    = updated.avatar_url;
+      player.avatar_preset = updated.avatar_preset;
+      const wrap = panel.querySelector('.player-profile-avatar-wrap');
+      if (wrap) { wrap.insertAdjacentHTML('afterend', _buildProfileAvatarWrap(player)); wrap.remove(); }
+      const pObj = (state.playerObjects || []).find(p => p.id === player.id);
+      if (pObj) { pObj.avatar_url = updated.avatar_url; pObj.avatar_preset = updated.avatar_preset; }
     }
 
     function openPlayerProfile(player) {
@@ -1894,6 +1972,7 @@
       requestAnimationFrame(() => panel.classList.add('open'));
 
       panel.querySelector('.player-profile-back').addEventListener('click', () => {
+        _closeAvatarPicker(panel);
         panel.classList.remove('open');
         setTimeout(() => panel.remove(), 220);
       });
@@ -1906,11 +1985,7 @@
         if (!file) return;
         try {
           const updated = await API.uploadPlayerAvatar(player.id, file);
-          player.avatar_url = updated.avatar_url;
-          const wrap = panel.querySelector('.player-profile-avatar-wrap');
-          if (wrap) { wrap.insertAdjacentHTML('afterend', _buildProfileAvatarWrap(player)); wrap.remove(); }
-          const pObj = (state.playerObjects || []).find(p => p.id === player.id);
-          if (pObj) pObj.avatar_url = updated.avatar_url;
+          _syncPlayerAvatar(panel, player, updated);
           showToast('Photo updated', 'success');
         } catch (err) {
           showToast(`Failed to upload: ${classifyError(err)}`, 'error');
@@ -1919,17 +1994,20 @@
       });
 
       panel.addEventListener('click', async e => {
-        if (!e.target.closest('.avatar-delete-btn')) return;
-        try {
-          await API.deletePlayerAvatar(player.id);
-          player.avatar_url = null;
-          const wrap = panel.querySelector('.player-profile-avatar-wrap');
-          if (wrap) { wrap.insertAdjacentHTML('afterend', _buildProfileAvatarWrap(player)); wrap.remove(); }
-          const pObj = (state.playerObjects || []).find(p => p.id === player.id);
-          if (pObj) pObj.avatar_url = null;
-          showToast('Photo removed', 'success');
-        } catch (err) {
-          showToast(`Failed to remove: ${classifyError(err)}`, 'error');
+        if (e.target.closest('.avatar-preset-trigger')) {
+          panel._avatarPicker ? _closeAvatarPicker(panel) : _openAvatarPicker(panel, player);
+          return;
+        }
+        if (e.target.closest('.avatar-delete-btn')) {
+          _closeAvatarPicker(panel);
+          try {
+            await API.deletePlayerAvatar(player.id);
+            _syncPlayerAvatar(panel, player, { avatar_url: null, avatar_preset: null });
+            showToast('Avatar removed', 'success');
+          } catch (err) {
+            showToast(`Failed to remove: ${classifyError(err)}`, 'error');
+          }
+          return;
         }
       });
 

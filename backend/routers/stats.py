@@ -276,10 +276,11 @@ def get_stats(db: Session = Depends(get_db)):
             models.Player.id,
             models.Player.name,
             models.Player.avatar_ext,
+            models.Player.avatar_preset,
             func.count(models.SessionPlayer.session_id).label("session_count"),
         )
         .join(models.SessionPlayer, models.SessionPlayer.player_id == models.Player.id)
-        .group_by(models.Player.id, models.Player.name, models.Player.avatar_ext)
+        .group_by(models.Player.id, models.Player.name, models.Player.avatar_ext, models.Player.avatar_preset)
         .order_by(func.count(models.SessionPlayer.session_id).desc())
         .limit(5)
         .all()
@@ -301,7 +302,7 @@ def get_stats(db: Session = Depends(get_db)):
             session_count=r.session_count,
             win_count=win_by_id.get(r.id, 0),
             win_rate=round(win_by_id.get(r.id, 0) / r.session_count * 100) if r.session_count else 0,
-            avatar_url=f"/api/players/{r.id}/avatar" if r.avatar_ext else None,
+            avatar_url=(f"/api/players/{r.id}/avatar" if r.avatar_ext else f"/avatars/{r.avatar_preset}.svg" if r.avatar_preset else None),
         )
         for r in top_player_rows
     ]

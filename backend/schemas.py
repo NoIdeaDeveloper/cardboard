@@ -218,9 +218,14 @@ class PlayerResponse(BaseModel):
     date_added: Optional[datetime] = None
     session_count: int = 0
     win_count: int = 0
-    avatar_url: Optional[str] = None  # set server-side when a custom photo exists
+    avatar_url: Optional[str] = None     # custom photo URL or preset SVG path, set server-side
+    avatar_preset: Optional[str] = None  # active preset key, e.g. "meeple"
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AvatarPresetSet(BaseModel):
+    preset: str
 
 
 class PlayerTopGame(BaseModel):

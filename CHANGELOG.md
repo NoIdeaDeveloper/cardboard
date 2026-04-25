@@ -12,6 +12,7 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Player profile photos** — upload a custom photo for any player via the player profile panel (click a player's name to open it, then hover the avatar circle and click the camera icon). Photos are stored in `data/avatars/` and replace the coloured-initials circle everywhere a player avatar appears: player list, player profile panel, co-player rows in the profile, quick-log player chips, and the stats leaderboard. Existing photos can be removed with the × button that appears on hover. Profile photos are included in ZIP backups and restored automatically.
+- **Default SVG avatar presets** — eight built-in SVG avatars are now available to choose from in the player profile panel alongside the custom photo upload: Meeple, Dice, Robot, Crown, Cat, Fox, Bear, and Knight. Hover the avatar circle in the profile panel and click the person icon to open a picker grid; the active selection is highlighted. Choosing a preset clears any custom upload, and uploading a custom photo clears any active preset. The × button removes either type. Preset avatars appear everywhere player avatars are rendered.
 
 ### Changed
 

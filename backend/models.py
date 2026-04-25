@@ -87,7 +87,8 @@ class Player(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, unique=True)
     date_added = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    avatar_ext = Column(String(10), nullable=True)  # e.g. ".jpg" when a custom photo is uploaded
+    avatar_ext = Column(String(10), nullable=True)    # e.g. ".jpg" when a custom photo is uploaded
+    avatar_preset = Column(String(50), nullable=True)  # e.g. "meeple" when a default SVG is chosen
 
 
 class SessionPlayer(Base):

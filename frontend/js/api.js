@@ -182,8 +182,9 @@ const API = {
   renamePlayer:       (id, name)   => request('PATCH',  `/players/${id}`, { name }),
   deletePlayer:       (id)         => request('DELETE', `/players/${id}`),
   getPlayerStats:     (id)         => request('GET',    `/players/${id}/stats`),
-  uploadPlayerAvatar: (id, file)   => uploadFile(`/players/${id}/avatar`, file),
-  deletePlayerAvatar: (id)         => request('DELETE', `/players/${id}/avatar`),
+  uploadPlayerAvatar:    (id, file)   => uploadFile(`/players/${id}/avatar`, file),
+  setPlayerAvatarPreset: (id, preset) => request('POST', `/players/${id}/avatar/preset`, { preset }),
+  deletePlayerAvatar:    (id)         => request('DELETE', `/players/${id}/avatar`),
 
   // Collection sharing
   getShareTokens:    ()              => request('GET',    '/share/tokens'),

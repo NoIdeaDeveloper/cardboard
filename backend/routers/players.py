@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/players", tags=["players"])
 
 AVATAR_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 _ALLOWED_AVATAR_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+_VALID_PRESETS = {"meeple", "dice", "robot", "crown", "cat", "fox", "bear", "knight"}
 
 
 def _avatars_dir() -> str:
@@ -29,7 +30,11 @@ def _avatar_path(player: models.Player) -> str:
 
 
 def _avatar_url(player: models.Player) -> str | None:
-    return f"/api/players/{player.id}/avatar" if player.avatar_ext else None
+    if player.avatar_ext:
+        return f"/api/players/{player.id}/avatar"
+    if player.avatar_preset:
+        return f"/avatars/{player.avatar_preset}.svg"
+    return None
 
 
 def _build_response(player: models.Player, session_count: int = 0, win_count: int = 0) -> schemas.PlayerResponse:
@@ -37,6 +42,7 @@ def _build_response(player: models.Player, session_count: int = 0, win_count: in
     r.session_count = session_count
     r.win_count = win_count
     r.avatar_url = _avatar_url(player)
+    r.avatar_preset = player.avatar_preset
     return r
 
 
@@ -122,7 +128,7 @@ def rename_player(player_id: int, data: schemas.PlayerUpdate, db: Session = Depe
 def get_player_avatar(player_id: int, db: Session = Depends(get_db)):
     player = get_player_or_404(player_id, db)
     if not player.avatar_ext:
-        raise HTTPException(status_code=404, detail="No avatar uploaded")
+        raise HTTPException(status_code=404, detail="No custom avatar uploaded")
     path = _avatar_path(player)
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Avatar file not found")
@@ -152,6 +158,7 @@ async def upload_player_avatar(
         safe_delete_file(_avatar_path(player))
 
     player.avatar_ext = ext
+    player.avatar_preset = None  # custom upload supersedes any preset
     db.commit()
 
     dest = _avatar_path(player)
@@ -173,16 +180,48 @@ async def upload_player_avatar(
     return _build_response(player, cnt or 0, wins or 0)
 
 
+@router.post("/{player_id}/avatar/preset", response_model=schemas.PlayerResponse)
+def set_player_avatar_preset(
+    player_id: int,
+    data: schemas.AvatarPresetSet,
+    db: Session = Depends(get_db),
+):
+    player = get_player_or_404(player_id, db)
+    if data.preset not in _VALID_PRESETS:
+        raise HTTPException(status_code=422, detail=f"Unknown preset '{data.preset}'")
+    if player.avatar_ext:
+        safe_delete_file(_avatar_path(player))
+        player.avatar_ext = None
+    player.avatar_preset = data.preset
+    db.commit()
+    db.refresh(player)
+    logger.info("Avatar preset set for player id=%d preset=%s", player_id, data.preset)
+    cnt = (
+        db.query(func.count())
+        .select_from(models.SessionPlayer)
+        .filter(models.SessionPlayer.player_id == player_id)
+        .scalar()
+    )
+    wins = (
+        db.query(func.count())
+        .select_from(models.PlaySession)
+        .filter(models.PlaySession.winner == player.name, models.PlaySession.winner.isnot(None))
+        .scalar()
+    )
+    return _build_response(player, cnt or 0, wins or 0)
+
+
 @router.delete("/{player_id}/avatar", status_code=204)
 def delete_player_avatar(player_id: int, db: Session = Depends(get_db)):
     player = get_player_or_404(player_id, db)
-    if not player.avatar_ext:
+    if not player.avatar_ext and not player.avatar_preset:
         raise HTTPException(status_code=404, detail="No avatar to delete")
-    path = _avatar_path(player)
-    player.avatar_ext = None
+    if player.avatar_ext:
+        safe_delete_file(_avatar_path(player))
+        player.avatar_ext = None
+    player.avatar_preset = None
     db.commit()
-    safe_delete_file(path)
-    logger.info("Avatar deleted for player id=%d", player_id)
+    logger.info("Avatar cleared for player id=%d", player_id)
 
 
 # ── Stats ────────────────────────────────────────────────────────────────────
@@ -242,7 +281,7 @@ def get_player_stats(player_id: int, db: Session = Depends(get_db)):
 
     # All co-players (most sessions in common)
     co_player_rows = (
-        db.query(models.Player.id, models.Player.name, models.Player.avatar_ext, func.count().label("co_count"))
+        db.query(models.Player.id, models.Player.name, models.Player.avatar_ext, models.Player.avatar_preset, func.count().label("co_count"))
         .join(models.SessionPlayer, models.SessionPlayer.player_id == models.Player.id)
         .filter(
             models.SessionPlayer.session_id.in_(
@@ -251,7 +290,7 @@ def get_player_stats(player_id: int, db: Session = Depends(get_db)):
             ),
             models.Player.id != player_id,
         )
-        .group_by(models.Player.id, models.Player.name, models.Player.avatar_ext)
+        .group_by(models.Player.id, models.Player.name, models.Player.avatar_ext, models.Player.avatar_preset)
         .order_by(func.count().desc())
         .all()
     )
@@ -305,7 +344,7 @@ def get_player_stats(player_id: int, db: Session = Depends(get_db)):
                 count=c.co_count,
                 wins_against=rivalry_data.get(c.id, (0, 0))[0],
                 losses_to=rivalry_data.get(c.id, (0, 0))[1],
-                avatar_url=f"/api/players/{c.id}/avatar" if c.avatar_ext else None,
+                avatar_url=(f"/api/players/{c.id}/avatar" if c.avatar_ext else f"/avatars/{c.avatar_preset}.svg" if c.avatar_preset else None),
             )
             for c in co_player_rows
         ],

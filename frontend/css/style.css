@@ -4410,20 +4410,42 @@ img.ql-chip-avatar { display: block; object-fit: cover; }
   display: inline-flex;
   flex-shrink: 0;
 }
-.avatar-upload-trigger {
+
+/* Two-button overlay (camera + preset picker) shown on hover */
+.avatar-controls-overlay {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: rgba(0,0,0,0.45);
+  background: rgba(0,0,0,0.48);
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   opacity: 0;
-  cursor: pointer;
-  color: #fff;
   transition: opacity 0.15s;
+  pointer-events: none;
 }
-.player-avatar-wrap:hover .avatar-upload-trigger { opacity: 1; }
+.player-avatar-wrap:hover .avatar-controls-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+.avatar-ctrl-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.35);
+  color: #fff;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s;
+}
+.avatar-ctrl-btn:hover { background: rgba(255,255,255,0.32); }
+
+/* Delete (×) button — top-right corner */
 .avatar-delete-btn {
   position: absolute;
   top: -3px;
@@ -4445,6 +4467,29 @@ img.ql-chip-avatar { display: block; object-fit: cover; }
   transition: opacity 0.15s;
 }
 .player-avatar-wrap:hover .avatar-delete-btn { opacity: 1; }
+
+/* Preset picker popover */
+.avatar-preset-popover {
+  display: grid;
+  grid-template-columns: repeat(4, 44px);
+  gap: 6px;
+  padding: 10px;
+  background: var(--bg-1, #fff);
+  border: 1px solid var(--border, #ddd);
+  border-radius: var(--radius-lg, 10px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+}
+.avatar-preset-item {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.12s, transform 0.12s;
+}
+.avatar-preset-item:hover { transform: scale(1.08); border-color: var(--accent, #5c7ae0); }
+.avatar-preset-item.active { border-color: var(--accent, #5c7ae0); box-shadow: 0 0 0 2px var(--accent, #5c7ae0); }
 
 /* Player wins badge */
 .player-wins {
