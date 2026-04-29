@@ -720,6 +720,192 @@ def export_static_html(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/export/pdf")
+def export_pdf(db: Session = Depends(get_db)):
+    """
+    Export the collection as a PDF with cover image, title, description,
+    difficulty, playtime, and player count for each game.
+    Only games with share_hidden=False are included.
+    """
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Image as RLImage,
+        Table, TableStyle, HRFlowable, KeepTogether,
+    )
+
+    games = db.query(models.Game).filter(models.Game.share_hidden == False).all()
+    results = build_game_responses(games, db)
+
+    buffer = io.BytesIO()
+    PAGE_W, _ = letter
+    MARGIN = 0.75 * inch
+    IMG_W = 1.25 * inch
+    IMG_H = 1.25 * inch
+    TEXT_W = PAGE_W - 2 * MARGIN - IMG_W - 0.15 * inch
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=MARGIN,
+        rightMargin=MARGIN,
+        topMargin=MARGIN,
+        bottomMargin=MARGIN,
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "GameTitle",
+        parent=styles["Normal"],
+        fontSize=13,
+        leading=17,
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#1a1a2e"),
+        spaceAfter=3,
+    )
+    meta_style = ParagraphStyle(
+        "GameMeta",
+        parent=styles["Normal"],
+        fontSize=8,
+        leading=11,
+        fontName="Helvetica",
+        textColor=colors.HexColor("#666666"),
+        spaceAfter=5,
+    )
+    desc_style = ParagraphStyle(
+        "GameDesc",
+        parent=styles["Normal"],
+        fontSize=8,
+        leading=12,
+        fontName="Helvetica",
+        textColor=colors.HexColor("#333333"),
+    )
+    heading_style = ParagraphStyle(
+        "Heading",
+        parent=styles["Normal"],
+        fontSize=20,
+        leading=26,
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#1a1a2e"),
+        alignment=1,
+        spaceAfter=4,
+    )
+    sub_style = ParagraphStyle(
+        "Sub",
+        parent=styles["Normal"],
+        fontSize=9,
+        leading=13,
+        fontName="Helvetica",
+        textColor=colors.HexColor("#888888"),
+        alignment=1,
+        spaceAfter=14,
+    )
+
+    def difficulty_label(d):
+        if d is None:
+            return None
+        if d <= 1.5:
+            label = "Very Easy"
+        elif d <= 2.5:
+            label = "Easy"
+        elif d <= 3.5:
+            label = "Medium"
+        elif d <= 4.5:
+            label = "Hard"
+        else:
+            label = "Very Hard"
+        return f"{d:.1f}/5 ({label})"
+
+    def load_cover(game):
+        try:
+            if game.image_cached and game.image_ext:
+                path = os.path.join(IMAGES_DIR, f"{game.id}{game.image_ext}")
+                if os.path.isfile(path):
+                    img = RLImage(path, width=IMG_W, height=IMG_H)
+                    img.hAlign = "CENTER"
+                    return img
+        except Exception as exc:
+            logger.warning("PDF: image load failed for game %s: %s", game.id, exc)
+        return None
+
+    story = []
+
+    ts_display = _date.today().strftime("%B %d, %Y")
+    story.append(Paragraph("Board Game Collection", heading_style))
+    story.append(Paragraph(f"Generated {ts_display} · {len(results)} games", sub_style))
+    story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor("#dddddd"), spaceAfter=10))
+
+    for game in results:
+        meta_parts = []
+
+        if game.min_players and game.max_players:
+            if game.min_players == game.max_players:
+                meta_parts.append(f"Players: {game.min_players}")
+            else:
+                meta_parts.append(f"Players: {game.min_players}–{game.max_players}")
+        elif game.min_players:
+            meta_parts.append(f"Players: {game.min_players}+")
+
+        if game.min_playtime and game.max_playtime:
+            if game.min_playtime == game.max_playtime:
+                meta_parts.append(f"Time: {game.min_playtime} min")
+            else:
+                meta_parts.append(f"Time: {game.min_playtime}–{game.max_playtime} min")
+        elif game.min_playtime:
+            meta_parts.append(f"Time: {game.min_playtime}+ min")
+
+        diff = difficulty_label(game.difficulty)
+        if diff:
+            meta_parts.append(f"Difficulty: {diff}")
+
+        desc = (game.description or "").strip()
+        if len(desc) > 700:
+            desc = desc[:697] + "…"
+
+        text_cells = [Paragraph(game.name, title_style)]
+        if meta_parts:
+            text_cells.append(Paragraph("  ·  ".join(meta_parts), meta_style))
+        if desc:
+            text_cells.append(Paragraph(desc, desc_style))
+
+        cover = load_cover(game)
+        if cover:
+            row = [[cover, text_cells]]
+            col_widths = [IMG_W + 0.1 * inch, TEXT_W]
+        else:
+            full_w = PAGE_W - 2 * MARGIN
+            row = [[text_cells]]
+            col_widths = [full_w]
+
+        tbl = Table(row, colWidths=col_widths)
+        tbl.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ]))
+
+        story.append(KeepTogether([tbl, Spacer(1, 6)]))
+        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#eeeeee"), spaceAfter=8))
+
+    doc.build(story)
+    buffer.seek(0)
+
+    filename = f"cardboard-collection-{_date.today().strftime('%Y-%m-%d')}.pdf"
+    return Response(
+        content=buffer.read(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{_safe_header_filename(filename)}"',
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
 RESTORE_MAX_BYTES = 500 * 1024 * 1024  # 500 MB
 
 
