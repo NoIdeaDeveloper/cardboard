@@ -2810,12 +2810,12 @@
     show_sessions_by_month: true, show_play_heatmap: true,
     show_sessions_by_dow: true, show_never_played: true,
     show_dormant: true, show_top_mechanics: true, show_collection_value: true,
-    show_milestones: true, show_goals: true,
+    show_milestones: true, show_goals: true, show_cooling_off: true,
     added_by_month_include_wishlist: true,
     section_order: ['summary', 'most_played', 'top_players', 'recently_played', 'recently_added',
                     'ratings', 'labels', 'added_by_month', 'sessions_by_month', 'play_heatmap',
                     'sessions_by_dow',
-                    'never_played', 'dormant', 'top_mechanics', 'collection_value',
+                    'never_played', 'cooling_off', 'dormant', 'top_mechanics', 'collection_value',
                     'milestones', 'goals'],
   };
 

@@ -54,7 +54,7 @@ def get_stats(db: Session = Depends(get_db)):
             func.count(models.PlaySession.id).label("count"),
             func.coalesce(func.sum(models.PlaySession.duration_minutes), 0).label("total_minutes"),
         )
-        .join(models.Game, models.PlaySession.game_id == models.Game.id)
+        .join(models.PlaySession, models.PlaySession.game_id == models.Game.id)
         .group_by(models.Game.id, models.Game.name)
         .order_by(func.count(models.PlaySession.id).desc())
         .limit(5)

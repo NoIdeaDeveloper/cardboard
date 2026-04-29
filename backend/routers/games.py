@@ -367,7 +367,7 @@ def get_games(
     mechanics: Optional[str] = Query(None, max_length=1000),
     categories: Optional[str] = Query(None, max_length=1000),
     location: Optional[str] = Query(None, max_length=255),
-    limit: Optional[int] = Query(None, ge=1, le=2000),
+    limit: Optional[int] = Query(None, ge=1, le=10000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
