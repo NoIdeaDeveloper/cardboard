@@ -3600,7 +3600,7 @@
           <div class="share-export-section">
             <div class="section-label">PDF Export</div>
             <p class="share-export-desc">Download a PDF with your entire collection — includes cover image, title, description, difficulty, playtime, and player count for each game.</p>
-            <button class="btn btn-secondary" id="share-export-static-btn">Download PDF</button>
+            <button class="btn btn-secondary" id="share-export-pdf-btn">Download PDF</button>
           </div>
         </div>
         <div id="share-tab-requests" style="display:none">
@@ -3610,8 +3610,8 @@
 
     el.querySelector('#share-modal-close').addEventListener('click', closeModal);
 
-    // Static export button in share modal
-    const staticExportBtn = el.querySelector('#share-export-static-btn');
+    // PDF export button in share modal
+    const staticExportBtn = el.querySelector('#share-export-pdf-btn');
     if (staticExportBtn) {
       staticExportBtn.addEventListener('click', () => {
         window.location.href = '/api/games/export/pdf';
