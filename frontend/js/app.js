@@ -2920,7 +2920,7 @@
     URL.revokeObjectURL(link.href);
   }
 
-  function wireStatsView(statsView) {
+  function wireStatsView(statsView, allGames = []) {
     statsView.querySelector('#stats-log-first-play')?.addEventListener('click', () => {
       const firstGame = state.games[0];
       if (firstGame) openQuickLogSession(firstGame);
@@ -3119,7 +3119,7 @@
         const bucket = ratingRow.dataset.bucket;
         const filterFn = bucketFilters[bucket];
         const gamesForBucket = filterFn
-          ? state.games.filter(g => g.user_rating != null && filterFn(g.user_rating))
+          ? allGames.filter(g => g.user_rating != null && filterFn(g.user_rating))
           : [];
         const n = gamesForBucket.length;
         const label = `Rated ${bucket} \u00b7 ${pluralize(n, 'game')}`;
@@ -3147,13 +3147,13 @@
           const monthIndex = new Date(`${mon} 1 ${yr}`).getMonth() + 1;
           const target = `${yr}-${String(monthIndex).padStart(2, '0')}`;
           const includeWishlist = statsView.querySelector('#added-wishlist-toggle')?.checked ?? true;
-          gamesForMonth = state.games.filter(g =>
+          gamesForMonth = allGames.filter(g =>
             g.date_added && g.date_added.slice(0, 7) === target &&
             (includeWishlist || g.status !== 'wishlist')
           );
         } else {
           const ids = JSON.parse(barRow.dataset.gameIds || '[]');
-          gamesForMonth = ids.map(id => state.games.find(g => g.id === id)).filter(Boolean);
+          gamesForMonth = ids.map(id => allGames.find(g => g.id === id)).filter(Boolean);
         }
         const n = gamesForMonth.length;
         const label = type === 'added'
@@ -3177,7 +3177,7 @@
         if (!count) return;
         const date = hmCell.dataset.date;
         const ids = JSON.parse(hmCell.dataset.gameIds || '[]');
-        const gamesForDay = ids.map(id => state.games.find(g => g.id === id)).filter(Boolean);
+        const gamesForDay = ids.map(id => allGames.find(g => g.id === id)).filter(Boolean);
         const label = `${date} · ${pluralize(count, 'session')}`;
         function showHeatmapList() {
           const listEl = buildMonthGameList(label, gamesForDay,
@@ -3197,7 +3197,7 @@
         if (!count) return;
         const dowLabel = dowCol.dataset.dowLabel;
         const ids = JSON.parse(dowCol.dataset.gameIds || '[]');
-        const gamesForDow = ids.map(id => state.games.find(g => g.id === id)).filter(Boolean);
+        const gamesForDow = ids.map(id => allGames.find(g => g.id === id)).filter(Boolean);
         const label = `${dowLabel}s · ${pluralize(count, 'session')}`;
         function showDowList() {
           const listEl = buildMonthGameList(label, gamesForDow,
@@ -3251,7 +3251,7 @@
 
       const row = e.target.closest('.insight-game-row[data-game-id], .most-played-item[data-game-id], .recent-session-item[data-game-id], .insight-nudge[data-game-id]');
       if (!row) return;
-      const game = state.games.find(g => g.id === parseInt(row.dataset.gameId, 10));
+      const game = allGames.find(g => g.id === parseInt(row.dataset.gameId, 10)) ?? state.games.find(g => g.id === parseInt(row.dataset.gameId, 10));
       if (game) openGameModal(game);
     });
 
@@ -3386,9 +3386,10 @@
       ]);
       const prefs = loadStatsPrefs();
       el.innerHTML = '';
-      const statsView = buildStatsView(stats, allGames ?? [], prefs, saveStatsPrefs, goals);
+      const safeGames = allGames ?? [];
+      const statsView = buildStatsView(stats, safeGames, prefs, saveStatsPrefs, goals);
       el.appendChild(statsView);
-      wireStatsView(statsView);
+      wireStatsView(statsView, safeGames);
       wireGoalsSection(statsView);
       _injectMilestonesIntoGrid(statsView, prefs);
       _animateStatBars(el);
@@ -3424,9 +3425,10 @@
       const prefs = loadStatsPrefs();
       const el = document.getElementById('stats-content');
       el.innerHTML = '';
-      const statsView = buildStatsView(stats, allGames ?? [], prefs, saveStatsPrefs, goals);
+      const safeGames = allGames ?? [];
+      const statsView = buildStatsView(stats, safeGames, prefs, saveStatsPrefs, goals);
       el.appendChild(statsView);
-      wireStatsView(statsView);
+      wireStatsView(statsView, safeGames);
       wireGoalsSection(statsView);
       _injectMilestonesIntoGrid(statsView, prefs);
       _animateStatBars(el);
