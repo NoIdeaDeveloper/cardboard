@@ -837,11 +837,23 @@ def export_pdf(db: Session = Depends(get_db)):
         return f"{d:.1f}/5 ({label})"
 
     def load_cover(game):
-        """Load a cached cover image and scale it to fit IMG_W × IMG_H preserving aspect ratio."""
+        """Load a cached cover image and scale it to fit IMG_W × IMG_H preserving aspect ratio.
+
+        Mirrors the fallback logic in GET /{game_id}/image: if image_ext is not stored
+        (records cached before that column was introduced), glob for any file matching
+        {game_id}.* so those images are not silently skipped.
+        """
         try:
-            if game.image_cached and game.image_ext:
-                path = os.path.join(IMAGES_DIR, f"{game.id}{game.image_ext}")
-                if os.path.isfile(path):
+            if game.image_cached:
+                # Primary path — extension is known
+                if game.image_ext:
+                    path = os.path.join(IMAGES_DIR, f"{game.id}{game.image_ext}")
+                else:
+                    # Fallback for legacy records where image_ext was not yet stored
+                    matches = glob.glob(os.path.join(IMAGES_DIR, f"{game.id}.*"))
+                    path = matches[0] if matches else None
+
+                if path and os.path.isfile(path):
                     img = RLImage(path)
                     iw, ih = img.imageWidth, img.imageHeight
                     if iw > 0 and ih > 0:
@@ -886,8 +898,6 @@ def export_pdf(db: Session = Depends(get_db)):
             meta_parts.append(f'<font color="{GOLD}">Difficulty</font> {diff}')
 
         desc = (game.description or "").strip()
-        if len(desc) > 700:
-            desc = desc[:697] + "…"
 
         text_cells = [Paragraph(_safe(game.name), title_style)]
         if meta_parts:
