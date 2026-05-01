@@ -3571,7 +3571,7 @@
         </div>
         <div class="share-modal-hero-text">
           <h2>Share Collection</h2>
-          <p>Share your collection via live link or download a static HTML file.</p>
+          <p>Share your collection via live link or download a PDF.</p>
         </div>
         <button class="modal-close" id="share-modal-close" aria-label="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -3598,9 +3598,9 @@
             </div>
           </div>
           <div class="share-export-section">
-            <div class="section-label">Static HTML Export</div>
-            <p class="share-export-desc">Download a self-contained HTML file with your entire collection — no server required. Perfect for sharing offline or via email/cloud storage.</p>
-            <button class="btn btn-secondary" id="share-export-static-btn">Download Static Page</button>
+            <div class="section-label">PDF Export</div>
+            <p class="share-export-desc">Download a PDF with your entire collection — includes cover image, title, description, difficulty, playtime, and player count for each game.</p>
+            <button class="btn btn-secondary" id="share-export-pdf-btn">Download PDF</button>
           </div>
         </div>
         <div id="share-tab-requests" style="display:none">
@@ -3610,11 +3610,11 @@
 
     el.querySelector('#share-modal-close').addEventListener('click', closeModal);
 
-    // Static export button in share modal
-    const staticExportBtn = el.querySelector('#share-export-static-btn');
+    // PDF export button in share modal
+    const staticExportBtn = el.querySelector('#share-export-pdf-btn');
     if (staticExportBtn) {
       staticExportBtn.addEventListener('click', () => {
-        window.location.href = '/api/games/export/static-html';
+        window.location.href = '/api/games/export/pdf';
         closeModal();
       });
     }

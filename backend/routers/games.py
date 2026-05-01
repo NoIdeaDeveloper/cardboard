@@ -720,6 +720,226 @@ def export_static_html(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/export/pdf")
+def export_pdf(db: Session = Depends(get_db)):
+    """
+    Export the collection as a PDF with cover image, title, description,
+    difficulty, playtime, and player count for each game.
+    Only games with share_hidden=False are included.
+    """
+    from html import escape as _html_escape, unescape as _html_unescape
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Image as RLImage,
+        Table, TableStyle, HRFlowable, KeepTogether,
+    )
+
+    def _safe(text: str) -> str:
+        """Strip HTML tags, collapse whitespace, then XML-escape for reportlab Paragraph."""
+        text = _html_unescape(text)
+        text = re.sub(r'<[^>]+>', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        return _html_escape(text)
+
+    games = db.query(models.Game).filter(models.Game.share_hidden == False).all()
+    results = build_game_responses(games, db)
+
+    buffer = io.BytesIO()
+    PAGE_W, _ = letter
+    MARGIN = 0.75 * inch
+    IMG_W = 1.25 * inch
+    IMG_H = 1.5 * inch        # portrait-friendly; most board game covers are taller than wide
+    IMG_COL_W = IMG_W + 0.15 * inch  # image column width, gap between image and text
+    TEXT_COL_W = PAGE_W - 2 * MARGIN - IMG_COL_W
+
+    # Brand colours — warm palette matching the web app
+    C_HEADING = colors.HexColor("#2b1d0e")
+    C_SUB     = colors.HexColor("#8a7055")
+    C_ACCENT  = colors.HexColor("#c9a84c")
+    C_TITLE   = colors.HexColor("#2b1d0e")
+    C_META    = colors.HexColor("#5c4535")
+    C_DESC    = colors.HexColor("#3c2e22")
+    C_DIVIDER = colors.HexColor("#e0c898")
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=MARGIN,
+        rightMargin=MARGIN,
+        topMargin=MARGIN,
+        bottomMargin=MARGIN,
+    )
+
+    styles = getSampleStyleSheet()
+    heading_style = ParagraphStyle(
+        "CollHeading",
+        parent=styles["Normal"],
+        fontSize=22,
+        leading=28,
+        fontName="Times-Bold",   # closest PDF-standard serif to the app's Playfair Display
+        textColor=C_HEADING,
+        alignment=1,
+        spaceAfter=4,
+    )
+    sub_style = ParagraphStyle(
+        "CollSub",
+        parent=styles["Normal"],
+        fontSize=9,
+        leading=13,
+        fontName="Helvetica",
+        textColor=C_SUB,
+        alignment=1,
+        spaceAfter=16,
+    )
+    title_style = ParagraphStyle(
+        "GameTitle",
+        parent=styles["Normal"],
+        fontSize=13,
+        leading=17,
+        fontName="Times-Bold",
+        textColor=C_TITLE,
+        spaceAfter=3,
+    )
+    meta_style = ParagraphStyle(
+        "GameMeta",
+        parent=styles["Normal"],
+        fontSize=8,
+        leading=11,
+        fontName="Helvetica",
+        textColor=C_META,
+        spaceAfter=5,
+    )
+    desc_style = ParagraphStyle(
+        "GameDesc",
+        parent=styles["Normal"],
+        fontSize=8,
+        leading=12,
+        fontName="Helvetica",
+        textColor=C_DESC,
+    )
+
+    def difficulty_label(d):
+        if d is None:
+            return None
+        if d <= 1.5:
+            label = "Very Easy"
+        elif d <= 2.5:
+            label = "Easy"
+        elif d <= 3.5:
+            label = "Medium"
+        elif d <= 4.5:
+            label = "Hard"
+        else:
+            label = "Very Hard"
+        return f"{d:.1f}/5 ({label})"
+
+    def load_cover(game):
+        """Load a cached cover image and scale it to fit IMG_W × IMG_H preserving aspect ratio.
+
+        Mirrors the fallback logic in GET /{game_id}/image: if image_ext is not stored
+        (records cached before that column was introduced), glob for any file matching
+        {game_id}.* so those images are not silently skipped.
+        """
+        try:
+            if game.image_cached:
+                # Primary path — extension is known
+                if game.image_ext:
+                    path = os.path.join(IMAGES_DIR, f"{game.id}{game.image_ext}")
+                else:
+                    # Fallback for legacy records where image_ext was not yet stored
+                    matches = glob.glob(os.path.join(IMAGES_DIR, f"{game.id}.*"))
+                    path = matches[0] if matches else None
+
+                if path and os.path.isfile(path):
+                    img = RLImage(path)
+                    iw, ih = img.imageWidth, img.imageHeight
+                    if iw > 0 and ih > 0:
+                        scale = min(IMG_W / iw, IMG_H / ih)
+                        img.drawWidth = iw * scale
+                        img.drawHeight = ih * scale
+                    else:
+                        img.drawWidth = IMG_W
+                        img.drawHeight = IMG_H
+                    img.hAlign = "CENTER"
+                    return img
+        except Exception as exc:
+            logger.warning("PDF: image load failed for game %s: %s", game.id, exc)
+        return None
+
+    story = []
+
+    ts_display = _date.today().strftime("%B %d, %Y")
+    story.append(Paragraph("Board Game Collection", heading_style))
+    story.append(Paragraph(f"Generated {ts_display} · {len(results)} games", sub_style))
+    story.append(HRFlowable(width="100%", thickness=2, color=C_DIVIDER, spaceAfter=10))
+
+    GOLD = "#c9a84c"
+
+    for game in results:
+        meta_parts = []
+
+        if game.min_players and game.max_players:
+            val = str(game.min_players) if game.min_players == game.max_players else f"{game.min_players}–{game.max_players}"
+            meta_parts.append(f'<font color="{GOLD}">Players</font> {val}')
+        elif game.min_players:
+            meta_parts.append(f'<font color="{GOLD}">Players</font> {game.min_players}+')
+
+        if game.min_playtime and game.max_playtime:
+            val = f"{game.min_playtime} min" if game.min_playtime == game.max_playtime else f"{game.min_playtime}–{game.max_playtime} min"
+            meta_parts.append(f'<font color="{GOLD}">Time</font> {val}')
+        elif game.min_playtime:
+            meta_parts.append(f'<font color="{GOLD}">Time</font> {game.min_playtime}+ min')
+
+        diff = difficulty_label(game.difficulty)
+        if diff:
+            meta_parts.append(f'<font color="{GOLD}">Difficulty</font> {diff}')
+
+        desc = (game.description or "").strip()
+
+        text_cells = [Paragraph(_safe(game.name), title_style)]
+        if meta_parts:
+            text_cells.append(Paragraph("  ·  ".join(meta_parts), meta_style))
+        if desc:
+            text_cells.append(Paragraph(_safe(desc), desc_style))
+
+        cover = load_cover(game)
+        if cover:
+            row = [[cover, text_cells]]
+            col_widths = [IMG_COL_W, TEXT_COL_W]
+        else:
+            row = [[text_cells]]
+            col_widths = [PAGE_W - 2 * MARGIN]
+
+        tbl = Table(row, colWidths=col_widths)
+        tbl.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ]))
+
+        story.append(KeepTogether([tbl, Spacer(1, 6)]))
+        story.append(HRFlowable(width="100%", thickness=0.5, color=C_DIVIDER, spaceAfter=8))
+
+    doc.build(story)
+    buffer.seek(0)
+
+    filename = f"cardboard-collection-{_date.today().strftime('%Y-%m-%d')}.pdf"
+    return Response(
+        content=buffer.read(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{_safe_header_filename(filename)}"',
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
 RESTORE_MAX_BYTES = 500 * 1024 * 1024  # 500 MB
 
 
