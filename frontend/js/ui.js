@@ -763,7 +763,7 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
 
   // ===== Wire events =====
 
-  el.querySelector('.modal-close').addEventListener('click', onCloseModal);
+  el.querySelector('.modal-close').addEventListener('click', (e) => { e.stopPropagation(); onCloseModal(); });
   const deleteGameBtn = el.querySelector('#delete-game-btn');
   deleteGameBtn.addEventListener('click', () => withLoading(deleteGameBtn, () => onDelete(game.id, game.name), 'Removing…'));
 

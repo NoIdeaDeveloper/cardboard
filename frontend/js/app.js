@@ -1089,7 +1089,7 @@
       backBtn.className = 'modal-back-btn';
       backBtn.setAttribute('aria-label', 'Back');
       backBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>`;
-      backBtn.addEventListener('click', onBack);
+      backBtn.addEventListener('click', (e) => { e.stopPropagation(); onBack(); });
       const hero = contentEl.querySelector('.modal-hero');
       if (hero) hero.appendChild(backBtn);
     }
