@@ -401,6 +401,52 @@ def get_player_stats(player_id: int, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/{player_id}/sessions", response_model=List[schemas.PlayerSessionResponse])
+def get_player_sessions(player_id: int, db: Session = Depends(get_db)):
+    get_player_or_404(player_id, db)
+
+    sessions = (
+        db.query(models.PlaySession)
+        .join(models.SessionPlayer, models.SessionPlayer.session_id == models.PlaySession.id)
+        .filter(models.SessionPlayer.player_id == player_id)
+        .order_by(models.PlaySession.played_at.desc())
+        .all()
+    )
+    if not sessions:
+        return []
+
+    session_ids = [s.id for s in sessions]
+    player_rows = (
+        db.query(models.SessionPlayer.session_id, models.Player.name, models.SessionPlayer.score)
+        .join(models.Player, models.Player.id == models.SessionPlayer.player_id)
+        .filter(models.SessionPlayer.session_id.in_(session_ids))
+        .all()
+    )
+    players_by_session: dict = {}
+    scores_by_session: dict = {}
+    for sid, name, score in player_rows:
+        players_by_session.setdefault(sid, []).append(name)
+        if score is not None:
+            scores_by_session.setdefault(sid, {})[name] = score
+
+    game_ids = list({s.game_id for s in sessions})
+    game_rows = db.query(models.Game.id, models.Game.title, models.Game.thumbnail_url).filter(
+        models.Game.id.in_(game_ids)
+    ).all()
+    game_info = {g.id: (g.title, g.thumbnail_url) for g in game_rows}
+
+    results = []
+    for s in sessions:
+        resp = schemas.PlayerSessionResponse.model_validate(s)
+        resp.players = players_by_session.get(s.id, [])
+        resp.player_scores = scores_by_session.get(s.id, {})
+        title, thumb = game_info.get(s.game_id, ("Unknown Game", None))
+        resp.game_name = title
+        resp.game_thumbnail = thumb
+        results.append(resp)
+    return results
+
+
 @router.delete("/{player_id}", status_code=204)
 def delete_player(player_id: int, db: Session = Depends(get_db)):
     player = get_player_or_404(player_id, db)

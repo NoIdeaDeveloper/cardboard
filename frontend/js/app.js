@@ -3249,6 +3249,32 @@
         return;
       }
 
+      // Player leaderboard drill-down — show sessions for that player
+      const playerRow = e.target.closest('.player-leaderboard-item[data-player-id]');
+      if (playerRow) {
+        const playerId = parseInt(playerRow.dataset.playerId, 10);
+        const playerName = playerRow.dataset.playerName || 'Player';
+        async function showPlayerSessions() {
+          try {
+            const sessions = await API.getPlayerSessions(playerId);
+            const listEl = buildPlayerSessionList(
+              playerName,
+              sessions,
+              (gameId) => {
+                const game = allGames.find(g => g.id === gameId) ?? state.games.find(g => g.id === gameId);
+                if (game) openGameModal(game, 'view', showPlayerSessions);
+              },
+              closeModal
+            );
+            openModal(listEl);
+          } catch (err) {
+            showToast('Could not load sessions for this player.', 'error');
+          }
+        }
+        showPlayerSessions();
+        return;
+      }
+
       const row = e.target.closest('.insight-game-row[data-game-id], .most-played-item[data-game-id], .recent-session-item[data-game-id], .insight-nudge[data-game-id]');
       if (!row) return;
       const game = allGames.find(g => g.id === parseInt(row.dataset.gameId, 10)) ?? state.games.find(g => g.id === parseInt(row.dataset.gameId, 10));

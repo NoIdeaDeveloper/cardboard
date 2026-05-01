@@ -3213,6 +3213,12 @@ img.ql-chip-avatar { display: block; object-fit: cover; }
 .most-played-item[data-game-id]:hover {
   opacity: 0.75;
 }
+.player-leaderboard-item {
+  transition: opacity var(--transition);
+}
+.player-leaderboard-item:hover {
+  opacity: 0.75;
+}
 
 .most-played-rank {
   width: 18px;
@@ -3559,6 +3565,60 @@ img.ql-chip-avatar { display: block; object-fit: cover; }
   color: var(--text-3);
   font-size: 0.875rem;
   margin: 0;
+}
+
+/* Player leaderboard session drill-down */
+.player-session-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.player-session-row + .player-session-row {
+  border-top: 1px solid var(--border);
+}
+.player-session-row:hover {
+  background: var(--bg-2);
+}
+.player-session-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-3);
+}
+.player-session-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.player-session-thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-3);
+}
+.player-session-info {
+  flex: 1;
+  min-width: 0;
+}
+.player-session-game {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.player-session-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--text-3);
 }
 
 /* ===== Image Edit Area ===== */

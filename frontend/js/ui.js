@@ -1545,6 +1545,63 @@ function buildMonthGameList(title, games, onGameClick, onClose) {
   return el;
 }
 
+function buildPlayerSessionList(playerName, sessions, onGameClick, onClose) {
+  const el = document.createElement('div');
+  el.className = 'month-drilldown';
+  el.innerHTML = `
+    <div class="month-drilldown-header">
+      <h2 class="month-drilldown-title">${escapeHtml(playerName)} · ${pluralize(sessions.length, 'session')}</h2>
+      <button class="month-drilldown-close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="month-drilldown-list"></div>`;
+  el.querySelector('.month-drilldown-close').addEventListener('click', onClose);
+  const list = el.querySelector('.month-drilldown-list');
+  if (!sessions.length) {
+    list.innerHTML = `<div class="secondary-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span class="secondary-empty-text">No sessions found for this player.</span>
+    </div>`;
+  } else {
+    for (const s of sessions) {
+      const item = document.createElement('div');
+      item.className = 'player-session-row';
+      item.dataset.gameId = s.game_id;
+      const scores = s.player_scores || {};
+      const playersHtml = s.players && s.players.length
+        ? s.players.map(p => scores[p] != null
+            ? `${escapeHtml(p)} <span class="session-score">${scores[p]}</span>`
+            : escapeHtml(p)).join(', ')
+        : '';
+      item.innerHTML = `
+        <div class="player-session-thumb">
+          ${s.game_thumbnail
+            ? `<img src="${escapeHtml(s.game_thumbnail)}" alt="" loading="lazy">`
+            : `<div class="player-session-thumb-placeholder"></div>`}
+        </div>
+        <div class="player-session-info">
+          <div class="player-session-game">${escapeHtml(s.game_name || 'Unknown Game')}</div>
+          <div class="player-session-meta">
+            <span class="session-date">${escapeHtml(formatDate(s.played_at))}</span>
+            ${s.solo ? `<span class="session-meta session-solo">Solo</span>` : ''}
+            ${s.player_count && !s.solo ? `<span class="session-meta">${pluralize(s.player_count, 'player')}</span>` : ''}
+            ${s.duration_minutes ? `<span class="session-meta">${s.duration_minutes} min</span>` : ''}
+            ${playersHtml ? `<span class="session-meta">${playersHtml}</span>` : ''}
+            ${s.winner && !s.solo ? `<span class="session-meta">&#127942; ${escapeHtml(s.winner)}</span>` : ''}
+            ${s.session_rating ? `<span class="session-rating">${'★'.repeat(s.session_rating)}${'☆'.repeat(5 - s.session_rating)}</span>` : ''}
+          </div>
+          ${s.notes ? `<div class="session-notes">${escapeHtml(s.notes)}</div>` : ''}
+        </div>`;
+      item.addEventListener('click', () => onGameClick(s.game_id));
+      list.appendChild(item);
+    }
+  }
+  return el;
+}
+
 // ===== Modal Management =====
 
 const FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
@@ -2468,7 +2525,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
           const maxSessions = topPlayers[0].session_count;
           const pct = Math.round((p.session_count / maxSessions) * 100);
           return `
-            <div class="most-played-item">
+            <div class="most-played-item player-leaderboard-item" data-player-id="${p.player_id}" data-player-name="${escapeHtml(p.player_name)}" style="cursor:pointer" title="View ${escapeHtml(p.player_name)}'s sessions">
               <div class="most-played-rank">${i + 1}</div>
               ${renderPlayerAvatar({ name: p.player_name, avatar_url: p.avatar_url || null }, 'player-avatar player-avatar-sm')}
               <div class="most-played-info">

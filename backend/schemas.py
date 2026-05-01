@@ -196,6 +196,11 @@ class PlaySessionResponse(PlaySessionCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PlayerSessionResponse(PlaySessionResponse):
+    game_name: str = ""
+    game_thumbnail: Optional[str] = None
+
+
 class PlayerCreate(BaseModel):
     name: str = Field(..., max_length=255)
 
