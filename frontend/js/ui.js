@@ -133,6 +133,8 @@ function buildGameListItem(game) {
   const el = document.createElement('div');
   el.className = 'game-list-item';
   el.dataset.gameId = game.id;
+  el.setAttribute('role', 'button');
+  el.setAttribute('aria-label', `View details for ${game.name}`);
 
   const playtime = formatPlaytime(game.min_playtime, game.max_playtime);
   const players  = formatPlayers(game.min_players, game.max_players);
@@ -488,8 +490,8 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
       ? `<div class="modal-section">
           <div class="section-label">Photo Gallery</div>
           <div class="gallery-view-strip">${images.map((img, i) =>
-            `<button class="gallery-view-thumb-btn" data-idx="${i}" aria-label="View image ${i + 1}">
-              <img class="gallery-view-thumb" src="/api/games/${game.id}/images/${img.id}/file" loading="lazy" alt="">
+            `<button class="gallery-view-thumb-btn" data-idx="${i}" aria-label="${img.caption ? escapeHtml(img.caption) : `Photo ${i + 1} of ${escapeHtml(game.name)}`}">
+              <img class="gallery-view-thumb" src="/api/games/${game.id}/images/${img.id}/file" loading="lazy" alt="${img.caption ? escapeHtml(img.caption) : `Photo ${i + 1} of ${escapeHtml(game.name)}`}">
               ${img.caption ? `<span class="gallery-view-caption">${escapeHtml(img.caption)}</span>` : ''}
             </button>`
           ).join('')}</div>
@@ -1269,7 +1271,7 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
       item.draggable = true;
       item.innerHTML = `
         <span class="gallery-drag-handle" aria-hidden="true">⠿</span>
-        <img class="gallery-thumb" src="/api/games/${game.id}/images/${img.id}/file" loading="lazy" alt="">
+        <img class="gallery-thumb" src="/api/games/${game.id}/images/${img.id}/file" loading="lazy" alt="${img.caption ? escapeHtml(img.caption) : `Photo ${index + 1} of ${escapeHtml(game.name)}`}">
         <div class="gallery-item-info">
           ${index === 0 ? '<span class="gallery-featured-badge">★ Featured</span>' : '<span class="gallery-item-num">#' + (index + 1) + '</span>'}
         </div>
@@ -1701,6 +1703,7 @@ function openGalleryLightbox(images, startIndex = 0) {
     current = ((idx % images.length) + images.length) % images.length;
     const im = images[current];
     img.src = im._src || `/api/games/${im.game_id}/images/${im.id}/file`;
+    img.alt = im.caption || `Photo ${current + 1} of ${images.length}`;
     if (counter) counter.textContent = `${current + 1} / ${images.length}`;
     if (captionEl) captionEl.textContent = im.caption || '';
   }

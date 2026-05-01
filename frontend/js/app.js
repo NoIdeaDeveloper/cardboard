@@ -2790,9 +2790,13 @@
       modal.addEventListener('keydown', trapHandler);
     });
 
+    const _gnEscape = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', _gnEscape);
+
     function close() {
       modal.classList.remove('open');
       if (trapHandler) { modal.removeEventListener('keydown', trapHandler); trapHandler = null; }
+      document.removeEventListener('keydown', _gnEscape);
       if (prevFocus) prevFocus.focus();
       setTimeout(() => { modal.style.display = 'none'; document.body.style.overflow = ''; }, 200);
       backdrop.removeEventListener('click', close);
