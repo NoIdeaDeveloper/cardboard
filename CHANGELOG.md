@@ -11,13 +11,106 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Player profile photos** — upload a custom photo for any player via the player profile panel (click a player's name to open it, then hover the avatar circle and click the camera icon). Photos are stored in `data/avatars/` and replace the coloured-initials circle everywhere a player avatar appears: player list, player profile panel, co-player rows in the profile, quick-log player chips, and the stats leaderboard. Existing photos can be removed with the × button that appears on hover. Profile photos are included in ZIP backups and restored automatically.
-- **Default SVG avatar presets** — eight built-in SVG avatars are now available to choose from in the player profile panel alongside the custom photo upload: Meeple, Dice, Robot, Crown, Cat, Fox, Bear, and Knight. Hover the avatar circle in the profile panel and click the person icon to open a picker grid; the active selection is highlighted. Choosing a preset clears any custom upload, and uploading a custom photo clears any active preset. The × button removes either type. Preset avatars appear everywhere player avatars are rendered.
-- **Persistent collection filters** — the active search text, never-played toggle, player count, play-time cap, mechanic chips, category chips, and location filter are now saved to localStorage and restored on page reload alongside the existing sort and view-mode preferences. The active-filter indicator bar is shown immediately on load if any filter was in effect when the page was last closed.
+- **Player sessions drill-down** — leaderboard entries in the player profile are now clickable, opening a modal list of all sessions for that player with cover thumbnail, game name, date, duration, players, scores, and notes. Backed by a new `GET /api/players/{id}/sessions` endpoint; returns an empty list when no sessions are found.
+- **Skip-to-content link** — a visually hidden `<a href="#main-content">` link appears on focus, letting keyboard users jump past the header without tabbing through every nav element.
+- **Screen reader heading for collection view** — a visually hidden `<h1>My Board Game Collection</h1>` gives screen reader users a clear landmark when landing on the collection tab.
+- **Focus trap in all modals** — Tab and Shift+Tab are now contained within open modals; focus returns to the trigger element on close. Previously only the game detail modal had this behaviour; it now applies to the players modal and game night modal as well.
+- **ARIA semantics on interactive game elements** — game grid cards and list items both receive `role="button"` and `aria-label="View details for {name}"`. Bulk-select checkboxes receive `role="checkbox"`, `aria-checked`, and `aria-label`.
+- **Escape key on game night modal** — pressing Escape now closes the game night modal, consistent with all other modals in the app.
+
+### Changed
+
+- **Real-time inline validation on the add-game form** — the name, min/max players, min/max playtime, and difficulty fields now show errors while typing, not only on submit. A green border appears when the value becomes valid. All `.valid` markers are cleared when the form resets after a successful save.
+- **Status badge icons** — the Wishlist badge now shows a `★` prefix and the Sold badge shows a `✓` prefix via CSS `::before`, improving scannability in the card grid and list view.
+- **Focus indicator enhanced** — `:focus-visible` now adds a 4 px `box-shadow` halo alongside the existing outline, making keyboard focus position much easier to track.
+- **`prefers-reduced-motion` support** — all CSS animations and transitions are suppressed for users who have enabled reduced motion in their OS accessibility settings.
+- **`prefers-contrast: more` support** — borders are strengthened and muted text colours are elevated to improve legibility when the user has enabled high-contrast mode in their OS.
+- **Mobile touch targets** — icon buttons expand to a 44 × 44 px minimum hit area on screens ≤ 600 px, meeting the WCAG 2.1 touch target guideline while keeping the visual size unchanged.
+- **Modals use dynamic viewport height** — `max-height` switched from `90vh`/`92vh` to `90dvh`/`92dvh` so modals are not clipped when the mobile browser's address bar collapses or expands.
+- **Card hover actions always visible on touch devices** — the quick-action buttons (View, + Log, Own It) that appear on hover are now always visible on touch-only devices via `@media (hover: none)`.
+- **Light theme text contrast** — `--text-3` in the light theme darkened from `#6a6a72` to `#50505a`, raising the contrast ratio from ~3.8:1 to ~5.1:1 (passes WCAG AA for normal text).
+- **Recently-played shelf fade edges** — a CSS `mask-image` gradient fades both ends of the horizontal scroll strip to indicate overflowing content.
+- **Stat card hover feedback** — all stat dashboard cards now lift and show an accent glow on hover. Previously only cards with drill-down behaviour had this effect.
+- **Gallery image alt text** — gallery thumbnails and lightbox images now use the image's caption as `alt` text when one exists, falling back to "Photo N of {game name}" instead of an empty string.
+
+### Fixed
+
+- **Event propagation on modal close and back buttons** — clicking the close (×) or back (‹) buttons in modals previously bubbled the event to parent listeners, which could trigger accidental navigation or re-open the modal. `stopPropagation()` is now called before invoking the handler.
+- **Crash on player sessions endpoint** — `GET /api/players/{id}/sessions` always returned 500 because the query referenced `models.Game.title`, which does not exist (the column is `name`). The query and result mapping are now corrected.
+- **XSS in static HTML export** — game names or descriptions containing `</script>` could break out of the inline `<script>` block in the exported HTML file. `json.dumps()` does not escape `</` by default; the serialised payload is now post-processed to replace `</` with `<\/` before embedding.
+- **Restore endpoint loaded entire backup into RAM** — `await file.read()` allocated a buffer equal to the full upload size before writing to disk, risking OOM on large backups. The upload is now streamed to a temp file in 64 KB chunks with the 500 MB limit enforced incrementally.
+- **BGG rate-limiter dict grew without bound** — per-IP timestamp lists were pruned on each request but dict keys (IP addresses) were never removed. On servers with many unique IPs the dict accumulated indefinitely. Empty entries are now deleted whenever the dict exceeds 1 000 keys.
+- **Settings endpoint accepted unbounded value length** — `PUT /api/settings/{key}` had no length constraint on the value field. The `SettingValue` schema now enforces `max_length=10 000`.
+- **Theme-flash script threw in private-browsing mode** — the inline `<script>` in `<head>` of `index.html` and `share.html` called `localStorage.getItem()` without a try/catch. Browsers that block storage access in private mode throw a `SecurityError` at that point, preventing all subsequent scripts from loading. The call is now wrapped in `try { … } catch (_) {}`.
+- **Escape keydown listener accumulated across stats reloads** — `wireStatsView` added a `document.addEventListener('keydown', …)` handler on every call with no cleanup, stacking a new listener on each stats view render. The handler is now registered with an `AbortController` signal; each `wireStatsView` call aborts the previous controller before creating a new one.
+- **Missing Content-Security-Policy header** — the security-headers middleware set `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` but omitted `Content-Security-Policy`. A CSP is now added restricting resources to same-origin by default, allowing `data:` and `blob:` image sources, and blocking `object-src` entirely.
+
+---
+
+## [0.2.7] — 2026-04-29
+
+### Fixed
+
+- **PDF export missing cover images** — `load_cover` skipped any game where `image_ext` is `NULL` in the database. These are records cached before the `image_ext` column was introduced whose image files exist on disk but whose extension was never backfilled. The image-serving endpoint already handles this with a glob fallback; the PDF exporter now mirrors that same logic.
+- **PDF descriptions truncated** — game descriptions were limited to 700 characters in the exported PDF. The truncation has been removed so full descriptions are included.
+
+---
+
+## [0.2.6] — 2026-04-29
+
+### Added
+
+- **PDF export for collection sharing** — the Share modal's export button now generates a downloadable PDF of your collection via a new `GET /api/games/export/pdf` endpoint backed by reportlab. Each entry includes the cover image (proportionally scaled), title, full description, difficulty, playtime, and player count. Colours align with the app's warm palette; headings use Times-Bold to approximate the display font.
+
+### Changed
+
+- **Collection export replaced: PDF instead of static HTML** — the static HTML export previously accessible from the Share modal has been replaced with the PDF export.
+
+### Fixed
+
+- **Stats drill-down modals always showed "No sessions logged for this period"** — click handlers for every bar chart (sessions by month, heatmap cells, day-of-week columns, rating buckets) looked up games using `state.games`, which is the paginated collection view capped at 200 entries. Any played game beyond the first page was not found and filtered out. Handlers now use the full `allGames` array (up to 5 000 games, no filters) already fetched by `loadStats`.
+
+---
+
+## [0.2.5] — 2026-04-28
+
+### Fixed
+
+- **Stats page stuck on endless loading spinner** — three bugs combined to prevent the Stats tab from ever rendering: (1) the `most_played` query joined `Game` to itself instead of to `PlaySession`, causing a 500 error on any database with logged sessions; (2) `GET /api/games/` capped `limit` at 2 000, but `loadStats` requests `limit=5000`, so FastAPI returned 422 before the query ran; (3) the error state rendered inside the same `loading-spinner` container as the spinner, making both failure modes visually indistinguishable from an infinite load.
+- **"Cooling Off" stats section never rendered** — `show_cooling_off` and the `cooling_off` key were present in `SECTION_DEFAULTS` inside `buildStatsView` but absent from `STATS_PREFS_DEFAULTS` in `app.js`. Because `loadStatsPrefs` normalises `section_order` against `STATS_PREFS_DEFAULTS`, the section was silently dropped before the ordered HTML was assembled and never appeared regardless of the toggle setting.
+
+---
+
+## [0.2.4] — 2026-04-25
+
+### Added
+
+- **Default SVG avatar presets** — eight built-in SVG avatars (Meeple, Dice, Robot, Crown, Cat, Fox, Bear, Knight) are available in the player profile panel alongside the custom photo upload. Hover the avatar circle and click the person icon to open a picker grid; the active selection is highlighted. Choosing a preset clears any custom upload, and uploading a custom photo clears any active preset. Preset avatars appear everywhere player avatars are rendered.
+- **Persistent collection filters** — the active search text, never-played toggle, player count, play-time cap, mechanic chips, category chips, and location filter are now saved to localStorage and restored on page reload alongside the existing sort and view-mode preferences. The active-filter indicator bar is shown immediately on load if any filter was active when the page was last closed.
 - **Search across designers, mechanics, and categories** — collection search now matches against a game's designers, mechanics, and categories in addition to its name. Multi-word queries are tokenised (stop words shorter than 2 characters are dropped) and each token must match somewhere across all four fields, so "deck building" finds games with that mechanic regardless of name, and "hargrave" finds all games by Elizabeth Hargrave.
 - **"Cooling Off" stats section** — a new section on the Stats page lists owned base games last played between 3 months and 1 year ago, surfacing games that are starting to cool off before they go fully dormant. The section appears between "Shelf of Shame" and "Dormant Games" and can be toggled and reordered like any other stats section.
-- **Player win-rate trend and recent form** — the player profile panel now shows three new data points for each player: a W/L pip row for their last 10 decided sessions (newest-first), a current streak badge when they have 2+ consecutive wins or losses, and a monthly win-rate bar chart for the last 12 months (only over sessions with a recorded winner). All three are computed server-side.
-- **Head-to-head rivalry stats fixed** — the per-co-player W/L query was previously an N+1 loop (two scalar subqueries per co-player). It is now a single aggregated query using conditional sums, reducing database round-trips from `1 + 2N` to `2` for a player with N co-players.
+- **Player win-rate trend and recent form** — the player profile panel now shows three new data points: a W/L pip row for the last 10 decided sessions (newest-first), a current streak badge for 2+ consecutive wins or losses, and a monthly win-rate bar chart for the last 12 months. All three are computed server-side.
+
+### Changed
+
+- **Native game sharing** — the custom in-modal share panel with WhatsApp/Signal-specific buttons has been replaced by a single action that uses the Web Share API where available, falling back to clipboard copy. The formatted message includes the game name, players/playtime, a 280-character truncated description, and the image URL.
+- **Head-to-head rivalry queries optimised** — the per-co-player W/L calculation was an N+1 loop (two scalar subqueries per co-player). It is now a single aggregated query using conditional sums, reducing database round-trips from `1 + 2N` to `2` for a player with N co-players.
+- **Unique mechanics count via database** — the count of distinct mechanics is now computed at the database level via a join-and-distinct query, replacing the previous approach of loading all games into Python and parsing stored JSON arrays.
+
+### Fixed
+
+- **Share page returned 200 for hidden games** — games marked "hidden from share" now return 404 on the sharing routes. Want-to-play submissions for hidden games are also blocked.
+- **Player sessions-by-month chart always showed equal-height bars** — `.player-sessions-bar` had `flex: 1` set, causing the flex algorithm to ignore the `height: ${pct}%` inline style and render every bar at the same height. Bars now use pixel heights calculated relative to the fixed chart area, with `justify-content: flex-end` so they grow from the bottom correctly.
+- **Session count missing from game responses** — `session_count` is now included in `GameResponse` and populated via a grouped `PlaySession` count query, enabling per-game play counts without a separate request.
+- **Share page and static export image fallback** — the share view and static HTML export now handle missing or server-relative image URLs gracefully, substituting a placeholder SVG instead of showing a broken image.
+
+---
+
+## [0.2.3] — 2026-04-24
+
+### Added
+
+- **Player profile photos** — upload a custom photo for any player via the player profile panel (click a player's name to open it, then hover the avatar circle and click the camera icon). Photos are stored in `data/avatars/` and replace the coloured-initials circle everywhere a player avatar appears: the player list, player profile panel, co-player rows in the profile, quick-log player chips, and the stats leaderboard. Existing photos can be removed with the × button that appears on hover. Profile photos are included in ZIP backups and restored automatically.
 
 ### Changed
 
@@ -25,26 +118,12 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- **Crash on player sessions endpoint** — `GET /api/players/{id}/sessions` always returned 500 because the query referenced `models.Game.title`, which does not exist; the column is `name`. The query now uses `models.Game.name` and the result mapping is updated to match.
-- **XSS in static HTML export** — game names or descriptions containing `</script>` could break out of the inline `<script>` block in the exported HTML file. `json.dumps()` does not escape `</` by default; the serialised payload is now post-processed to replace every `</` with `<\/` before embedding.
-- **Restore endpoint loaded entire backup into RAM** — `await file.read(500 MB)` allocated a single buffer equal to the upload size before writing it to disk, risking OOM on large backups. The upload is now streamed to the temp file in 64 KB chunks with the size limit enforced incrementally.
-- **BGG rate-limiter dict grew without bound** — per-IP timestamp lists were pruned on each request, but the dict keys (IP addresses) were never removed. On servers that see many unique IPs (DHCP churn, VPN) the dict accumulated indefinitely. Empty entries are now deleted whenever the dict exceeds 1 000 keys.
-- **Settings endpoint accepted unbounded value length** — `PUT /api/settings/{key}` had no length constraint on the value field, allowing arbitrarily large writes. The `SettingValue` schema now enforces `max_length=10 000`.
-- **Theme-flash script threw in private-browsing mode** — the inline `<script>` in `<head>` of `index.html` and `share.html` called `localStorage.getItem()` without a try/catch. Browsers that block storage access in private mode throw a `SecurityError` at that point, preventing all subsequent scripts from loading. The call is now wrapped in `try { … } catch (_) {}`.
-- **Escape keydown listener accumulated across stats reloads** — `wireStatsView` added a `document.addEventListener('keydown', …)` handler on every call (initial load and background refresh) with no cleanup, so each stats view render stacked another live listener. The handler is now registered with an `AbortController` signal; each `wireStatsView` call aborts the previous controller before creating a new one.
-- **Missing Content-Security-Policy header** — the security-headers middleware set `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` but omitted `Content-Security-Policy`. A CSP is now added restricting resources to same-origin by default, allowing `data:` and `blob:` image sources (used by the gallery and static export), and blocking `object-src` entirely.
-
-- **Stats drill-down modals always showed "No sessions logged for this period"** — the click handlers for every bar chart (sessions by month, heatmap cells, day-of-week columns, rating buckets) looked up games using `state.games`, which is the paginated collection view capped at 200 entries per server request. Any played game beyond that first page was simply not found and filtered out, producing an empty list. The handlers now use the full `allGames` array already fetched by `loadStats` (up to 5000 games, no filters), which is passed through to `wireStatsView`.
-- **Stats page stuck on endless loading spinner** — three separate bugs combined to prevent the Stats tab from ever rendering. (1) The `most_played` query joined `Game` to itself instead of joining `PlaySession`, causing a 500 error on any database with logged play sessions. (2) The `GET /api/games/` endpoint capped `limit` at 2000, but `loadStats` requests `limit=5000`; FastAPI returned 422 before the query ran. (3) The error state rendered inside the same `loading-spinner` container as the real spinner, so both failures were visually indistinguishable from an infinite load.
-- **"Cooling Off" stats section never rendered** — `show_cooling_off` and the `cooling_off` key were present in `SECTION_DEFAULTS` inside `buildStatsView` but absent from `STATS_PREFS_DEFAULTS` in `app.js`. Because `loadStatsPrefs` normalises `section_order` against `STATS_PREFS_DEFAULTS`, the section was silently dropped before the ordered HTML was assembled, so it never appeared in the stats grid regardless of the toggle setting.
-
-- **Heatmap scroll position incorrect on first render** — the 52-week activity heatmap's scroll-to-current-week logic ran synchronously after the element was inserted, reading `scrollWidth = 0` because layout had not yet completed. The scroll is now deferred to the next animation frame so the element is fully laid out before the offset is calculated.
-- **IntersectionObserver fired immediately with `isIntersecting: false`** — observer targets were registered before the elements were appended to the document, so the initial callback always saw them as out-of-view. Observe calls are now deferred to the next animation frame, after the elements are in the DOM.
-- **Coach tour could start multiple times on concurrent load paths** — `maybeStartTour` had no guard against being called concurrently; each invocation could independently pass the localStorage check and fire the first-visit tour. An in-progress flag (`_tourCheckDone`) is now set before the async settings fetch and on tour completion, preventing duplicate tours and redundant server round-trips.
-- **Opening a game from certain contexts could fail silently** — `onOpenGame` was called with a raw numeric ID instead of the resolved game object. If the ID didn't match a loaded game the callback received `undefined` and produced no visible error. The call site now looks up the full game object from `allGames` first and skips the callback entirely if no match is found.
-- **Player profile sessions-by-month chart always showed equal-height bars** — `.player-sessions-bar` had `flex: 1` which caused the flex algorithm to ignore the `height: ${pct}%` inline style, giving every bar the same height regardless of play count. Bars now use pixel heights calculated relative to the fixed chart area and the column uses `justify-content: flex-end` so bars grow from the bottom correctly.
-- **Cost/hr on game modal was inflated when sessions lacked recorded duration** — sessions without a logged duration contributed 0 minutes to the total, causing the denominator (hours played) to be understated and the $/hr figure to be too high. For example, 10 plays where only 2 had duration recorded would compute cost over 2 hours instead of 10. Unrecorded sessions now use the game's `min_playtime` as their duration estimate; if `min_playtime` is not set, the average of sessions that do have duration is used instead. Sessions that are entirely without recorded or estimated duration still suppress the display.
-- **Static HTML export had no CSS and showed no games** — two bugs combined: (1) `style.css` was referenced as `/css/style.css`, an absolute path that a browser rejects when opening a local file; (2) `window.__STATIC_COLLECTION__` was injected just before `</body>`, after the inline script that reads it, so the variable was always `null` when the page initialised. The export now inlines the full CSS as a `<style>` block, inlines `shared-utils.js` with the data variable appended to the same script (guaranteeing it is defined before the main script block runs), and embeds the logo icon as a base64 data URL so no network requests are needed at all.
+- **Static HTML export had no CSS and showed no games** — two bugs combined: (1) `style.css` was referenced as `/css/style.css`, an absolute path that browsers reject when opening a local file; (2) `window.__STATIC_COLLECTION__` was injected just before `</body>`, after the inline script that reads it, so the variable was always `null` at initialisation. The export now inlines the full CSS as a `<style>` block and appends the data variable to the same script block that reads it, with the logo embedded as a base64 data URL so no network requests are needed.
+- **Cost/hr on game modal inflated when sessions lacked recorded duration** — sessions without a logged duration contributed 0 minutes to the total, understating hours played and inflating the $/hr figure. Unrecorded sessions now use the game's `min_playtime` as an estimate; if `min_playtime` is unset, the average of sessions that do have duration is used. Sessions with no recorded or estimated duration continue to suppress the cost/hr display.
+- **Coach tour could start multiple times on concurrent load paths** — `maybeStartTour` had no guard against concurrent invocations; each could independently pass the localStorage check and fire the first-visit tour. An in-progress flag (`_tourCheckDone`) is now set before the async settings fetch and on tour completion, preventing duplicate tours and redundant server round-trips.
+- **Opening a game from certain contexts failed silently** — `onOpenGame` was called with a raw numeric ID instead of the resolved game object. If the ID didn't match a loaded game the callback received `undefined` with no visible error. The call site now looks up the full game object and skips the callback if no match is found.
+- **Heatmap scroll position incorrect on first render** — the 52-week activity heatmap's scroll-to-current-week logic ran synchronously after the element was inserted, reading `scrollWidth = 0` because layout had not yet completed. The scroll is now deferred to the next animation frame.
+- **IntersectionObserver fired immediately with `isIntersecting: false`** — observer targets were registered before elements were appended to the document, so the initial callback always saw them as out-of-view. Observe calls are now deferred to the next animation frame, after elements are in the DOM.
 
 ---
 
@@ -69,12 +148,12 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 - **Restore failed: [errno 18] invalid cross-device link** — the restore endpoint created its temporary ZIP in `/tmp`, which is a different filesystem from `/app/data` inside Docker. `os.replace` requires both paths to be on the same filesystem. The temp file is now written directly into `DATA_DIR`, making the rename atomic.
 - **ZIP path traversal in restore** — a crafted backup could contain entries like `images/../../../etc/passwd` that escaped `DATA_DIR` when extracted. The restore endpoint now resolves every destination path with `os.realpath` and rejects anything that does not start within `DATA_DIR`.
-- **"Welcome to Cardboard" shown on non-empty filtered tabs** — switching to the Owned, Wishlist, or Sold tab when that tab had zero games incorrectly displayed the new-user welcome screen. The check now distinguishes a truly empty collection (all tabs, no games, no filters) from an empty filtered view and shows a tab-specific message instead ("No wishlist games yet.", etc.).
+- **"Welcome to Cardboard" shown on non-empty filtered tabs** — switching to the Owned, Wishlist, or Sold tab when that tab had zero games incorrectly displayed the new-user welcome screen. The check now distinguishes a truly empty collection (all tabs, no games, no filters) from an empty filtered view and shows a tab-specific message instead.
 - **Theme toggle flicker** — element-level CSS transitions fired simultaneously with the View Transitions API cross-fade, causing buttons and backgrounds to double-animate. A `html.view-transitioning` class now suppresses all element transitions for the duration of the page-level overlay.
 - **Rating Delta section not toggling with Ratings** — hiding the Ratings section in the stats panel did not hide the Rating Delta subsection below it. Both sections are now toggled together.
-- **BGG import uses wrong game name** — the BGG XML export uses `sortindex="1"` to mark the canonical title (e.g. "The Castles of Burgundy" vs "Castles of Burgundy, The"). The importer now prefers the `sortindex="1"` element and falls back to the generic `<name>` element, matching BGG's own display behaviour.
+- **BGG import used wrong game name** — the BGG XML export uses `sortindex="1"` to mark the canonical title (e.g. "The Castles of Burgundy" vs "Castles of Burgundy, The"). The importer now prefers the `sortindex="1"` element and falls back to the generic `<name>` element, matching BGG's own display behaviour.
 - **Shortcuts panel used inconsistent UI** — the keyboard shortcuts overlay used a bespoke modal with opacity-only animation. It now uses the same `openModal`/`closeModal` system as all other panels (spring scale + blur backdrop, focus trap, scroll lock, Escape to close).
-- **"Import from BGG" on empty homepage showed file picker immediately** — clicking the button on the empty-collection screen opened a file picker with no context. It now navigates to the Stats page, opens the Settings panel, scrolls the BGG import row into view, and flashes a highlight so the user understands where to proceed.
+- **"Import from BGG" on empty homepage showed file picker immediately** — clicking the button opened a file picker with no context. It now navigates to the Stats page, opens the Settings panel, scrolls the BGG import row into view, and flashes a highlight so the user understands where to proceed.
 - **Exception chain lost when saving tags** — `_save_tags` wrapped errors in a generic HTTP 500 without `from e`, discarding the original traceback. The chain is now preserved for easier production debugging.
 
 ### Changed
@@ -105,7 +184,7 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 - **Collection Health grade label** — the lowest tier (0–39) has been renamed from "Needs Attention" to "Just Starting", and the score-key legend in the info popover updated to match. The previous label was alarming for new users who haven't yet added or played any games.
 - **Light mode color palette** — the warm beige (`#dbd4ca`) palette has been replaced with a cool neutral gray (`#eaeaee` base). Text contrast is improved and button/input outlines are sharper against the gray backgrounds.
-- **Docker defaults baked into image** — `DATABASE_URL` and `FRONTEND_PATH` are now set as `ENV` defaults in the Dockerfile. Users no longer need to define them in `docker-compose.yml` or `docker run` commands; the correct values for the container's layout are applied automatically. Both can still be overridden if needed (e.g. pointing `DATABASE_URL` at a PostgreSQL instance).
+- **Docker defaults baked into image** — `DATABASE_URL` and `FRONTEND_PATH` are now set as `ENV` defaults in the Dockerfile. Users no longer need to define them in `docker-compose.yml` or `docker run` commands; the correct values for the container's layout are applied automatically. Both can still be overridden if needed.
 
 ---
 
@@ -129,6 +208,13 @@ Initial public release.
 - Single Docker container deployment; Unraid instructions included
 - Pre-built images published to GHCR on version tags (`ghcr.io/noideadeveloper/cardboard`)
 
-[Unreleased]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.7...HEAD
+[0.2.7]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.6...v0.2.7
+[0.2.6]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.5...v0.2.6
+[0.2.5]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.4...v0.2.5
+[0.2.4]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.3...v0.2.4
+[0.2.3]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.2...v0.2.3
+[0.2.2]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/NoIdeaDeveloper/cardboard/releases/tag/v0.1.0
