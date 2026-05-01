@@ -950,6 +950,9 @@
         el.style.position = 'relative';
         const cb = document.createElement('div');
         cb.className = 'bulk-checkbox';
+        cb.setAttribute('role', 'checkbox');
+        cb.setAttribute('aria-checked', state.selectedGameIds.has(game.id) ? 'true' : 'false');
+        cb.setAttribute('aria-label', `Select ${game.name}`);
         cb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
         el.insertBefore(cb, el.firstChild);
         if (state.selectedGameIds.has(game.id)) el.classList.add('selected');
@@ -1646,14 +1649,32 @@
     const modal    = document.getElementById('players-modal');
     const inner    = document.getElementById('players-modal-inner');
     const backdrop = document.getElementById('players-modal-backdrop');
+    const prevFocus = document.activeElement;
 
     inner.innerHTML = '<p style="padding:1rem;opacity:0.6">Loading…</p>';
     modal.style.display = 'flex';
-    requestAnimationFrame(() => modal.classList.add('open'));
     document.body.style.overflow = 'hidden';
+
+    let trapHandler = null;
+    requestAnimationFrame(() => {
+      modal.classList.add('open');
+      const focusables = () => [...modal.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
+      const first = focusables()[0];
+      if (first) first.focus();
+      trapHandler = (e) => {
+        if (e.key !== 'Tab') return;
+        const els = focusables();
+        if (!els.length) return;
+        if (e.shiftKey && document.activeElement === els[0]) { e.preventDefault(); els[els.length - 1].focus(); }
+        else if (!e.shiftKey && document.activeElement === els[els.length - 1]) { e.preventDefault(); els[0].focus(); }
+      };
+      modal.addEventListener('keydown', trapHandler);
+    });
 
     function close() {
       modal.classList.remove('open');
+      if (trapHandler) { modal.removeEventListener('keydown', trapHandler); trapHandler = null; }
+      if (prevFocus) prevFocus.focus();
       setTimeout(() => { modal.style.display = 'none'; document.body.style.overflow = ''; }, 200);
       backdrop.removeEventListener('click', close);
       document.removeEventListener('keydown', onKeyDown);
@@ -2696,6 +2717,7 @@
     const modal   = document.getElementById('game-night-modal');
     const inner   = document.getElementById('game-night-inner');
     const backdrop = document.getElementById('game-night-backdrop');
+    const prevFocus = document.activeElement;
 
     inner.innerHTML = `
       <div class="modal-content-panel">
@@ -2722,12 +2744,27 @@
       </div>`;
 
     modal.style.display = 'flex';
-    requestAnimationFrame(() => modal.classList.add('open'));
     document.body.style.overflow = 'hidden';
-    inner.querySelector('#gn-players').focus();
+
+    let trapHandler = null;
+    requestAnimationFrame(() => {
+      modal.classList.add('open');
+      inner.querySelector('#gn-players').focus();
+      const focusables = () => [...modal.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
+      trapHandler = (e) => {
+        if (e.key !== 'Tab') return;
+        const els = focusables();
+        if (!els.length) return;
+        if (e.shiftKey && document.activeElement === els[0]) { e.preventDefault(); els[els.length - 1].focus(); }
+        else if (!e.shiftKey && document.activeElement === els[els.length - 1]) { e.preventDefault(); els[0].focus(); }
+      };
+      modal.addEventListener('keydown', trapHandler);
+    });
 
     function close() {
       modal.classList.remove('open');
+      if (trapHandler) { modal.removeEventListener('keydown', trapHandler); trapHandler = null; }
+      if (prevFocus) prevFocus.focus();
       setTimeout(() => { modal.style.display = 'none'; document.body.style.overflow = ''; }, 200);
       backdrop.removeEventListener('click', close);
     }

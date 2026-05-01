@@ -25,6 +25,9 @@ function buildGameCard(game) {
   const el = document.createElement('div');
   el.className = 'game-card';
   el.dataset.gameId = game.id;
+  el.setAttribute('role', 'button');
+  el.setAttribute('aria-label', `View details for ${game.name}`);
+  el.setAttribute('tabindex', '0');
 
   const playtime = formatPlaytime(game.min_playtime, game.max_playtime);
   const players  = formatPlayers(game.min_players, game.max_players);

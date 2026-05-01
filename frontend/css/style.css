@@ -74,8 +74,8 @@
   --border-hover:     rgba(0,0,0,0.20);
   --text:             #18181c;
   --text-2:           #3c3c42;
-  --text-3:           #6a6a72;
-  --text-muted:       #6a6a72;
+  --text-3:           #50505a;  /* was #6a6a72 — contrast ~5.1:1 on light bg, passes WCAG AA */
+  --text-muted:       #50505a;
   --shadow:           0 4px 24px rgba(0,0,0,0.10);
   --shadow-lg:        0 8px 48px rgba(0,0,0,0.16);
   --accent-glow:      rgba(201,168,76,0.20);
@@ -732,6 +732,8 @@ button.footer-link {
   -webkit-overflow-scrolling: touch;
   position: relative;
   /* Shelf plank via box-shadow on container */
+  mask-image: linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%);
 }
 
 /* Shelf plank beneath the books */
@@ -889,6 +891,14 @@ button.footer-link {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
+}
+
+@media (hover: none) {
+  .card-hover-actions {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
 }
 
 .card-hover-btn {
@@ -1269,6 +1279,9 @@ button.footer-link {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.loading-spinner p { animation: pulse 1.5s ease-in-out infinite; }
+
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -1495,6 +1508,7 @@ button.footer-link {
 .form-group input.invalid,
 .form-group textarea.invalid,
 .form-input.invalid { border-color: var(--danger) !important; }
+.form-input.valid { border-color: var(--success); }
 
 .field-error {
   display: none;
@@ -1611,7 +1625,7 @@ button.footer-link {
   z-index: 1;
   width: 100%;
   max-width: 640px;
-  max-height: 90vh;
+  max-height: 90dvh;
   overflow-y: auto;
   background: var(--bg-2);
   border-radius: var(--radius-lg);
@@ -2826,6 +2840,12 @@ img.ql-chip-avatar { display: block; object-fit: cover; }
   border-radius: var(--radius-lg);
   padding: 18px 14px;
   text-align: center;
+  transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px var(--accent-glow);
+  border-color: var(--border-hover);
 }
 
 .stat-card-value {
@@ -5044,7 +5064,7 @@ img.player-profile-avatar { display: block; }
   .bulk-status-select { min-width: 120px; }
   .games-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
   .modal { padding: 0; align-items: flex-end; }
-  .modal-container { max-width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; max-height: 92vh; }
+  .modal-container { max-width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; max-height: 92dvh; }
   .form-grid { grid-template-columns: 1fr; }
   .session-form-grid { grid-template-columns: 1fr; }
   .edit-form-grid { grid-template-columns: 1fr; }
@@ -5052,11 +5072,12 @@ img.player-profile-avatar { display: block; }
 
 @media (max-width: 600px) {
   .icon-btn {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
-  
+
   .icon-btn svg {
     width: 15px;
     height: 15px;
@@ -5488,4 +5509,43 @@ img.player-profile-avatar { display: block; }
 /* Stat bars animated fill */
 .stat-bar-fill {
   transition: width 0.9s cubic-bezier(0.4, 0, 0.2, 1), height 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===== Skip Navigation Link ===== */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 12px;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: var(--btn-on-accent);
+  font-weight: 600;
+  font-size: var(--text-base);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  z-index: 10000;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 0; }
+
+/* ===== Screen reader only utility ===== */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ===== Reduced Motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
