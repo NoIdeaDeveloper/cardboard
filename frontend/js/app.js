@@ -2416,27 +2416,55 @@
       return valid;
     }
 
-    // Clear individual field errors as user corrects them
+    // Real-time inline validation — show errors while typing, mark valid when correct
     f('m-name').addEventListener('input', () => {
-      if (f('m-name').value.trim()) clearFieldError(e('name'), f('m-name'));
+      const el = f('m-name');
+      if (el.value.trim()) {
+        clearFieldError(e('name'), el);
+        el.classList.add('valid');
+      } else {
+        setFieldError(e('name'), el, 'Name is required');
+        el.classList.remove('valid');
+      }
     });
     ['m-min-players', 'm-max-players'].forEach(id => {
       f(id).addEventListener('input', () => {
-        const minP = parseInt(f('m-min-players').value, 10);
-        const maxP = parseInt(f('m-max-players').value, 10);
-        if (!minP || !maxP || minP <= maxP) clearFieldError(e('max-players'), f('m-max-players'));
+        const minEl = f('m-min-players'), maxEl = f('m-max-players');
+        const minP = parseInt(minEl.value, 10), maxP = parseInt(maxEl.value, 10);
+        if (minP && maxP && minP > maxP) {
+          setFieldError(e('max-players'), maxEl, 'Must be ≥ min players');
+          maxEl.classList.remove('valid');
+        } else {
+          clearFieldError(e('max-players'), maxEl);
+          if (maxP) maxEl.classList.add('valid');
+          if (minP) minEl.classList.add('valid');
+        }
       });
     });
     ['m-min-playtime', 'm-max-playtime'].forEach(id => {
       f(id).addEventListener('input', () => {
-        const minT = parseInt(f('m-min-playtime').value, 10);
-        const maxT = parseInt(f('m-max-playtime').value, 10);
-        if (!minT || !maxT || minT <= maxT) clearFieldError(e('max-playtime'), f('m-max-playtime'));
+        const minEl = f('m-min-playtime'), maxEl = f('m-max-playtime');
+        const minT = parseInt(minEl.value, 10), maxT = parseInt(maxEl.value, 10);
+        if (minT && maxT && minT > maxT) {
+          setFieldError(e('max-playtime'), maxEl, 'Must be ≥ min playtime');
+          maxEl.classList.remove('valid');
+        } else {
+          clearFieldError(e('max-playtime'), maxEl);
+          if (maxT) maxEl.classList.add('valid');
+          if (minT) minEl.classList.add('valid');
+        }
       });
     });
     f('m-difficulty').addEventListener('input', () => {
-      const diff = parseFloat(f('m-difficulty').value);
-      if (!f('m-difficulty').value || (diff >= 1 && diff <= 5)) clearFieldError(e('difficulty'), f('m-difficulty'));
+      const el = f('m-difficulty');
+      const diff = parseFloat(el.value);
+      if (el.value && (diff < 1 || diff > 5)) {
+        setFieldError(e('difficulty'), el, 'Must be between 1 and 5');
+        el.classList.remove('valid');
+      } else {
+        clearFieldError(e('difficulty'), el);
+        if (el.value) el.classList.add('valid');
+      }
     });
 
     form.addEventListener('submit', async (e) => {
@@ -2516,6 +2544,7 @@
           showToast(`"${payload.name}" added to collection!`, 'success');
           launchConfetti();
           form.reset();
+          form.querySelectorAll('.valid').forEach(el => el.classList.remove('valid'));
           if (_addGamePreviewBlobUrl) { URL.revokeObjectURL(_addGamePreviewBlobUrl); _addGamePreviewBlobUrl = null; }
           setPreview(null);
           switchView('collection');
