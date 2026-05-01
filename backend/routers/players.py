@@ -430,10 +430,10 @@ def get_player_sessions(player_id: int, db: Session = Depends(get_db)):
             scores_by_session.setdefault(sid, {})[name] = score
 
     game_ids = list({s.game_id for s in sessions})
-    game_rows = db.query(models.Game.id, models.Game.title, models.Game.thumbnail_url).filter(
+    game_rows = db.query(models.Game.id, models.Game.name, models.Game.thumbnail_url).filter(
         models.Game.id.in_(game_ids)
     ).all()
-    game_info = {g.id: (g.title, g.thumbnail_url) for g in game_rows}
+    game_info = {g.id: (g.name, g.thumbnail_url) for g in game_rows}
 
     results = []
     for s in sessions:

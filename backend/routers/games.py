@@ -65,6 +65,11 @@ def _check_bgg_rate_limit(request: Request) -> None:
         if len(_bgg_buckets[ip]) >= _BGG_RATE_LIMIT:
             raise HTTPException(status_code=429, detail="Too many BGG requests — please wait a moment")
         _bgg_buckets[ip].append(now)
+        # Prune stale IPs (empty buckets after eviction) to prevent unbounded growth
+        if len(_bgg_buckets) > 1000:
+            stale = [k for k, v in _bgg_buckets.items() if not v]
+            for k in stale:
+                del _bgg_buckets[k]
 
 
 def _heat_level(last_played) -> int:
@@ -676,6 +681,8 @@ def export_static_html(db: Session = Depends(get_db)):
     # reads window.__STATIC_COLLECTION__ at line 2 of that block.
     utils_path = os.path.join(FRONTEND_PATH, "js", "shared-utils.js")
     json_payload = json.dumps(games_json, separators=(',', ':'))
+    # Prevent </script> in any string value from breaking out of the script block
+    json_payload = json_payload.replace('</', '<\\/')
     data_assignment = f'window.__STATIC_COLLECTION__ = {json_payload};'
     if os.path.isfile(utils_path):
         with open(utils_path, 'r', encoding='utf-8') as fh:
@@ -959,13 +966,18 @@ async def restore_backup(file: UploadFile = File(...)):
 
     validate_file_extension(file.filename or "", {".zip"}, "Only .zip backup files are allowed")
 
-    content = await file.read(RESTORE_MAX_BYTES + 1)
-    if len(content) > RESTORE_MAX_BYTES:
-        raise HTTPException(status_code=413, detail="Backup file too large (max 500 MB)")
-
     tmp_zip = tempfile.NamedTemporaryFile(suffix=".zip", delete=False, dir=data_dir)
     try:
-        tmp_zip.write(content)
+        total = 0
+        while True:
+            chunk = await file.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > RESTORE_MAX_BYTES:
+                tmp_zip.close()
+                raise HTTPException(status_code=413, detail="Backup file too large (max 500 MB)")
+            tmp_zip.write(chunk)
         tmp_zip.close()
 
         with zipfile.ZipFile(tmp_zip.name, "r") as zf:

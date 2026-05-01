@@ -1,7 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
 class SettingValue(BaseModel):
-    value: str
+    value: str = Field(max_length=10_000)
 
 
 @router.get("/{key}")

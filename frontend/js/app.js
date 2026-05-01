@@ -2920,7 +2920,11 @@
     URL.revokeObjectURL(link.href);
   }
 
+  let _statsEscController = null;
+
   function wireStatsView(statsView, allGames = []) {
+    if (_statsEscController) _statsEscController.abort();
+    _statsEscController = new AbortController();
     statsView.querySelector('#stats-log-first-play')?.addEventListener('click', () => {
       const firstGame = state.games[0];
       if (firstGame) openQuickLogSession(firstGame);
@@ -2950,14 +2954,14 @@
       btn.setAttribute('aria-expanded', String(!open));
       btn.classList.toggle('active', !open);
     });
-    document.addEventListener('keydown', function _sectionInfoEsc(e) {
+    document.addEventListener('keydown', function(e) {
       if (e.key !== 'Escape') return;
       statsView.querySelectorAll('.health-info-popover:not([hidden])').forEach(popover => {
         popover.hidden = true;
         popover.previousElementSibling?.querySelector('.health-info-btn')?.setAttribute('aria-expanded', 'false');
         popover.previousElementSibling?.querySelector('.health-info-btn')?.classList.remove('active');
       });
-    });
+    }, { signal: _statsEscController.signal });
 
     // Heatmap right-edge fade: remove when scrolled to end
     const heatmapScroll = statsView.querySelector('.stats-heatmap-scroll');
