@@ -1,6 +1,7 @@
 import logging
 import os
 import uuid
+from datetime import date, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -372,6 +373,30 @@ def get_player_stats(player_id: int, db: Session = Depends(get_db)):
         for r in month_rate_rows
     ]
 
+    # Zero-fill both month series for the trailing 12 months
+    today = date.today()
+    trailing_months: list[str] = []
+    for i in range(11, -1, -1):
+        month = today.month - i
+        year = today.year
+        while month <= 0:
+            month += 12
+            year -= 1
+        trailing_months.append(f"{year}-{month:02d}")
+
+    sbm_map = {r.month: r.count for r in sessions_by_month_rows}
+    sessions_by_month_filled = [
+        schemas.PlayerSessionsByMonth(month=m, count=sbm_map.get(m, 0))
+        for m in trailing_months
+    ]
+
+    wrbm_map = {r.month: r for r in win_rate_by_month}
+    win_rate_by_month_filled = [
+        wrbm_map[m] if m in wrbm_map
+        else schemas.PlayerWinRateByMonth(month=m, win_rate=0, sessions=0)
+        for m in trailing_months
+    ]
+
     return schemas.PlayerStatsResponse(
         session_count=session_count,
         win_count=win_count,
@@ -391,13 +416,10 @@ def get_player_stats(player_id: int, db: Session = Depends(get_db)):
             )
             for c in co_player_rows
         ],
-        sessions_by_month=[
-            schemas.PlayerSessionsByMonth(month=r.month, count=r.count)
-            for r in sessions_by_month_rows
-        ],
+        sessions_by_month=sessions_by_month_filled,
         recent_form=recent_form,
         current_streak=schemas.PlayerStreak(kind=streak_kind, length=streak_len),
-        win_rate_by_month=win_rate_by_month,
+        win_rate_by_month=win_rate_by_month_filled,
     )
 
 

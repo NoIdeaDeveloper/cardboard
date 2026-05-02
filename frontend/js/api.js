@@ -129,6 +129,7 @@ const API = {
   deleteGame: (id)       => request('DELETE', `/games/${id}`),
 
   // Play sessions
+  getSessionSummary: (gameId)   => request('GET',    `/games/${gameId}/session-summary`),
   getSessions:   (gameId)       => request('GET',    `/games/${gameId}/sessions`),
   addSession:    (gameId, data) => request('POST',   `/games/${gameId}/sessions`, data),
   updateSession: (id, data)     => request('PATCH',  `/sessions/${id}`, data),

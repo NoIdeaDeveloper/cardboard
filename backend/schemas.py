@@ -135,6 +135,8 @@ class CollectionStatsResponse(BaseModel):
     unplayed_count: int
     rated_count: int
     locations: Dict[str, int] = {}
+    mechanic_counts: Dict[str, int] = {}
+    category_counts: Dict[str, int] = {}
 
 
 class GameImageResponse(BaseModel):
@@ -438,6 +440,62 @@ class ShelfWarmerEntry(BaseModel):
     days_since: int
 
 
+class TopMechanicEntry(BaseModel):
+    name: str
+    count: int
+
+
+class NeverPlayedEntry(BaseModel):
+    id: int
+    name: str
+    date_added: Optional[datetime] = None
+
+
+class DormantGameEntry(BaseModel):
+    id: int
+    name: str
+    last_played: date
+
+
+class RecentlyAddedEntry(BaseModel):
+    id: int
+    name: str
+    date_added: datetime
+
+
+class NeglectedFavoriteEntry(BaseModel):
+    id: int
+    name: str
+    months_ago: int
+
+
+class RatingDeltaEntry(BaseModel):
+    id: int
+    name: str
+    delta: float
+
+
+class CollectionHealth(BaseModel):
+    score: int
+    play_pct: int
+    rating_score: int
+    diversity_score: int
+    played_count: int
+    owned_base_count: int
+    avg_rating_raw: float
+    unique_mechanics: int
+
+
+class TopWishlistEntry(BaseModel):
+    id: int
+    name: str
+
+
+class SessionSummaryResponse(BaseModel):
+    session_count: int
+    total_minutes: int
+
+
 class StatsResponse(BaseModel):
     total_games: int
     by_status: Dict[str, int]
@@ -460,3 +518,17 @@ class StatsResponse(BaseModel):
     sessions_by_day: List[SessionsByDayEntry] = []
     collection_value: CollectionValueStats = Field(default_factory=CollectionValueStats)
     shelf_warmers: List[ShelfWarmerEntry] = []
+    # Server-precomputed fields (eliminate heavy client-side game-array passes)
+    top_mechanic: Optional[str] = None
+    top_mechanics: List[TopMechanicEntry] = []
+    dormant_games: List[DormantGameEntry] = []
+    recently_added: List[RecentlyAddedEntry] = []
+    never_played_list: List[NeverPlayedEntry] = []
+    neglected_favorite: Optional[NeglectedFavoriteEntry] = None
+    rating_vs_bgg: List[RatingDeltaEntry] = []
+    collection_health: Optional[CollectionHealth] = None
+    added_by_month_owned_only: List[AddedByMonthEntry] = []
+    daily_streak: int = 0
+    weekly_streak: int = 0
+    top_wishlist_game: Optional[TopWishlistEntry] = None
+    unplayed_with_top_mechanic: int = 0

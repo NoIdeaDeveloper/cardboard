@@ -1370,9 +1370,9 @@
         count = preCount;
         totalHours = preTotalMinutes / 60;
       } else {
-        const sessions = await API.getSessions(gameId);
-        count = sessions.length;
-        totalHours = sessions.reduce((s, p) => s + (p.duration_minutes || 0), 0) / 60;
+        const summary = await API.getSessionSummary(gameId);
+        count = summary.session_count;
+        totalHours = summary.total_minutes / 60;
       }
       const earned     = loadMilestones();
       const seenKeys   = new Set(earned.map(m => m.key));
@@ -1614,17 +1614,6 @@
   }
 
   // ===== Player Profile Chart Helpers =====
-
-  function _buildMonthWindow() {
-    const now = new Date();
-    return Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-      return {
-        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleDateString(undefined, { month: 'short' }),
-      };
-    });
-  }
 
   // Renders a player profile bar chart. Each month in `months` must have
   // pre-computed `px` (bar height in pixels) and `tip` (tooltip string).
@@ -2117,10 +2106,11 @@
 
         let sessionsByMonthHtml = '';
         if (stats.sessions_by_month && stats.sessions_by_month.length > 0) {
-          const months = _buildMonthWindow().map(m => {
-            const found = stats.sessions_by_month.find(r => r.month === m.key);
-            return { ...m, count: found ? found.count : 0 };
-          });
+          const months = stats.sessions_by_month.map(m => ({
+            key: m.month,
+            label: new Date(m.month + '-01T12:00:00').toLocaleDateString(undefined, { month: 'short' }),
+            count: m.count,
+          }));
           const maxCount = Math.max(...months.map(m => m.count), 1);
           months.forEach(m => {
             m.px  = m.count > 0 ? Math.max(3, Math.round(m.count / maxCount * barAreaPx)) : 0;
@@ -2145,16 +2135,16 @@
 
         let winRateTrendHtml = '';
         if (stats.win_rate_by_month && stats.win_rate_by_month.length > 0) {
-          const months = _buildMonthWindow().map(m => {
-            const found = stats.win_rate_by_month.find(r => r.month === m.key);
-            const winRate = found ? found.win_rate : null;
-            const sessions = found ? found.sessions : 0;
+          const months = stats.win_rate_by_month.map(m => {
+            const label = new Date(m.month + '-01T12:00:00').toLocaleDateString(undefined, { month: 'short' });
+            const hasData = m.sessions > 0;
             return {
-              ...m,
-              px:  winRate !== null ? Math.max(3, Math.round(winRate / 100 * barAreaPx)) : 0,
-              tip: winRate !== null
-                ? `${m.label}: ${winRate}% over ${pluralize(sessions, 'session')}`
-                : `${m.label}: no decided sessions`,
+              key: m.month,
+              label,
+              px:  hasData ? Math.max(3, Math.round(m.win_rate / 100 * barAreaPx)) : 0,
+              tip: hasData
+                ? `${label}: ${m.win_rate}% over ${pluralize(m.sessions, 'session')}`
+                : `${label}: no decided sessions`,
             };
           });
           winRateTrendHtml = _buildPlayerBarChart('Win Rate (12 months)', months);
@@ -2640,13 +2630,9 @@
       });
     }
 
-    const mc = {}, cc = {};
-    state.games.forEach(g => {
-      parseList(g.mechanics).forEach(m => { if (m) mc[m] = (mc[m] || 0) + 1; });
-      parseList(g.categories).forEach(c => { if (c) cc[c] = (cc[c] || 0) + 1; });
-    });
-    const topM = Object.entries(mc).sort(([, a], [, b]) => b - a).slice(0, 10).map(([n]) => n);
-    const topC = Object.entries(cc).sort(([, a], [, b]) => b - a).slice(0, 10).map(([n]) => n);
+    const collStats = state.collectionStats || {};
+    const topM = Object.keys(collStats.mechanic_counts || {}).slice(0, 10);
+    const topC = Object.keys(collStats.category_counts || {}).slice(0, 10);
 
     buildChips(mechRow, topM, 'filterMechanics');
     buildChips(catRow,  topC, 'filterCategories');
@@ -2993,7 +2979,8 @@
 
   let _statsEscController = null;
 
-  function wireStatsView(statsView, allGames = []) {
+  function wireStatsView(statsView, stats = {}) {
+    const allGames = state.games;
     if (_statsEscController) _statsEscController.abort();
     _statsEscController = new AbortController();
     statsView.querySelector('#stats-log-first-play')?.addEventListener('click', () => {
@@ -3176,7 +3163,9 @@
         prefs.added_by_month_include_wishlist = wishlistToggle.checked;
         saveStatsPrefs(prefs);
         const chart = statsView.querySelector('#added-by-month-chart');
-        if (chart) chart.innerHTML = buildAddedByMonthHtml(state.games, wishlistToggle.checked);
+        if (chart) chart.innerHTML = buildAddedByMonthFromEntries(
+          wishlistToggle.checked ? (stats.added_by_month || []) : (stats.added_by_month_owned_only || [])
+        );
       });
     }
     const bucketFilters = {
@@ -3480,17 +3469,15 @@
     const el = document.getElementById('stats-content');
     el.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>Loading statistics…</p></div>';
     try {
-      const [stats, goals, { data: allGames }] = await Promise.all([
+      const [stats, goals] = await Promise.all([
         API.getStats(),
         API.getGoals().catch(() => []),
-        API.getGames({ limit: 5000, offset: 0 }),
       ]);
       const prefs = loadStatsPrefs();
       el.innerHTML = '';
-      const safeGames = allGames ?? [];
-      const statsView = buildStatsView(stats, safeGames, prefs, saveStatsPrefs, goals);
+      const statsView = buildStatsView(stats, [], prefs, saveStatsPrefs, goals);
       el.appendChild(statsView);
-      wireStatsView(statsView, safeGames);
+      wireStatsView(statsView, stats);
       wireGoalsSection(statsView);
       _injectMilestonesIntoGrid(statsView, prefs);
       _animateStatBars(el);
@@ -3518,18 +3505,16 @@
     if (_statsLoading) return;
     if (!document.getElementById('view-stats')?.classList.contains('active')) return;
     try {
-      const [stats, goals, { data: allGames }] = await Promise.all([
+      const [stats, goals] = await Promise.all([
         API.getStats(),
         API.getGoals().catch(() => []),
-        API.getGames({ limit: 5000, offset: 0 }),
       ]);
       const prefs = loadStatsPrefs();
       const el = document.getElementById('stats-content');
       el.innerHTML = '';
-      const safeGames = allGames ?? [];
-      const statsView = buildStatsView(stats, safeGames, prefs, saveStatsPrefs, goals);
+      const statsView = buildStatsView(stats, [], prefs, saveStatsPrefs, goals);
       el.appendChild(statsView);
-      wireStatsView(statsView, safeGames);
+      wireStatsView(statsView, stats);
       wireGoalsSection(statsView);
       _injectMilestonesIntoGrid(statsView, prefs);
       _animateStatBars(el);

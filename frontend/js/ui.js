@@ -1747,20 +1747,8 @@ function openSingleImageLightbox(url, alt = '') {
 
 // ===== Stats View =====
 
-function buildAddedByMonthHtml(games, includeWishlist) {
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const now = new Date();
-  const entries = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const month = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-    const target = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const count = games.filter(g =>
-      g.date_added && g.date_added.slice(0, 7) === target &&
-      (includeWishlist || g.status !== 'wishlist')
-    ).length;
-    entries.push({ month, count });
-  }
+function buildAddedByMonthFromEntries(entries) {
+  if (!entries || !entries.length) return '';
   const max = Math.max(...entries.map(e => e.count), 1);
   return entries.map(e => `<div class="stat-bar-row" data-month="${escapeHtml(e.month)}" data-type="added" data-count="${e.count}">
           <span class="stat-bar-label">${escapeHtml(e.month)}</span>
@@ -1768,6 +1756,7 @@ function buildAddedByMonthHtml(games, includeWishlist) {
           <span class="stat-bar-count">${e.count}</span>
         </div>`).join('');
 }
+
 
 // ── Stats section info-popover helper ────────────────────────────────────────
 // Returns the header row (title + ⓘ button) and the hidden popover as HTML.
@@ -2004,7 +1993,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
   const el = document.createElement('div');
   el.className = 'stats-view';
 
-  if (stats.total_sessions === 0 && games.length > 0) {
+  if (stats.total_sessions === 0 && stats.total_games > 0) {
     el.innerHTML = `
       <div class="stats-no-sessions">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" class="stats-no-sessions-icon" aria-hidden="true">
@@ -2025,51 +2014,14 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
     ? `${baseGameCount} <span class="stat-expansion-note">(+${totalExpansions} exp.)</span>`
     : stats.total_games;
 
-  // Compute extra metrics client-side
+  // Metrics from server-precomputed fields
   const mostActiveMonth = stats.sessions_by_month.length
     ? stats.sessions_by_month.reduce((a, b) => b.count > a.count ? b : a, stats.sessions_by_month[0])
     : null;
   const avgSessionLen = stats.avg_session_minutes ? Math.round(stats.avg_session_minutes) : null;
-  const topMechanicEntry = (() => {
-    const counts = {};
-    games.filter(g => g.status === 'owned').forEach(g => {
-      parseList(g.mechanics).forEach(m => { if (m) counts[m] = (counts[m] || 0) + 1; });
-    });
-    const sorted = Object.entries(counts).sort(([, a], [, b]) => b - a);
-    return sorted[0] || null;
-  })();
-
-  // ===== Streak computation =====
-  const _activeDates = new Set((stats.sessions_by_day || []).map(e => e.date));
-
-  // Current daily streak — count back from today
-  let _dailyStreak = 0;
-  const _sd = new Date(); _sd.setHours(0, 0, 0, 0);
-  while (_activeDates.has(_sd.toISOString().slice(0, 10))) {
-    _dailyStreak++;
-    _sd.setDate(_sd.getDate() - 1);
-  }
-
-  // Weekly streak — group into ISO weeks, scan 52 weeks back from current
-  function _isoWeekKey(dateStr) {
-    const d = new Date(dateStr + 'T00:00:00');
-    const jan4 = new Date(d.getFullYear(), 0, 4);
-    const week = Math.ceil(((d - jan4) / 86400000 + jan4.getDay() + 1) / 7);
-    return `${d.getFullYear()}-${week}`;
-  }
-  const _weeksWithSessions = new Set([..._activeDates].map(_isoWeekKey));
-  let _curWeekStreak = 0, _maxWeekStreak = 0, _runStreak = 0;
-  const _nowW = new Date(); _nowW.setHours(0, 0, 0, 0);
-  for (let w = 0; w < 52; w++) {
-    const d = new Date(_nowW); d.setDate(d.getDate() - w * 7);
-    if (_weeksWithSessions.has(_isoWeekKey(d.toISOString().slice(0, 10)))) {
-      _runStreak++;
-      if (_runStreak > _maxWeekStreak) _maxWeekStreak = _runStreak;
-      if (w === _curWeekStreak) _curWeekStreak = _runStreak; // unbroken from now
-    } else {
-      _runStreak = 0;
-    }
-  }
+  const topMechanicName = stats.top_mechanic || null;
+  const _dailyStreak = stats.daily_streak || 0;
+  const _maxWeekStreak = stats.weekly_streak || 0;
 
   const statDefs = [
     { label: 'Total Games',   value: totalGamesLabel, raw: true },
@@ -2081,37 +2033,25 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
     { label: 'Never Played',  value: stats.never_played_count, drilldown: 'never_played' },
     ...(avgSessionLen != null ? [{ label: 'Avg Session',       value: avgSessionLen + ' min' }] : []),
     ...(mostActiveMonth && mostActiveMonth.count > 0 ? [{ label: 'Best Month',  value: mostActiveMonth.month }] : []),
-    ...(topMechanicEntry ? [{ label: 'Top Mechanic', value: topMechanicEntry[0] }] : []),
+    ...(topMechanicName ? [{ label: 'Top Mechanic', value: topMechanicName }] : []),
     ...(_dailyStreak > 1   ? [{ label: 'Daily Streak',  value: pluralize(_dailyStreak, 'day') }] : []),
     ...(_maxWeekStreak > 1 ? [{ label: 'Best Streak',   value: pluralize(_maxWeekStreak, 'week') }] : []),
   ];
 
-  // Build insight nudges
+  // Build insight nudges from server-precomputed data
   const insightNudges = [];
-  // Neglected favorite: most played but not played recently
-  const neglected = games
-    .filter(g => g.status === 'owned' && g.last_played)
-    .sort((a, b) => {
-      const countA = (stats.session_counts || {})[a.id] || 0;
-      const countB = (stats.session_counts || {})[b.id] || 0;
-      if (countB !== countA) return countB - countA; // most played first
-      return new Date(a.last_played) - new Date(b.last_played); // then oldest last played
-    })[0];
+  const neglected = stats.neglected_favorite;
   if (neglected) {
-    const monthsAgo = Math.floor((Date.now() - new Date(neglected.last_played)) / (1000 * 60 * 60 * 24 * 30));
-    if (monthsAgo >= 3) {
-      insightNudges.push({
-        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
-        text: `<strong>${escapeHtml(neglected.name)}</strong> hasn't been played in ${pluralize(monthsAgo, 'month')} — give it another go!`,
-        gameId: neglected.id,
-        action: 'View game',
-      });
-    }
+    insightNudges.push({
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+      text: `<strong>${escapeHtml(neglected.name)}</strong> hasn't been played in ${pluralize(neglected.months_ago, 'month')} — give it another go!`,
+      gameId: neglected.id,
+      action: 'View game',
+    });
   }
-  // Wishlist count
   const wishlistCount = stats.by_status.wishlist || 0;
   if (wishlistCount > 0) {
-    const topWish = games.filter(g => g.status === 'wishlist').sort((a, b) => (b.priority || 0) - (a.priority || 0))[0];
+    const topWish = stats.top_wishlist_game;
     insightNudges.push({
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
       text: `You have <strong>${wishlistCount}</strong> ${wishlistCount !== 1 ? 'games' : 'game'} on your wishlist${topWish ? ` — top pick: <strong>${escapeHtml(topWish.name)}</strong>` : ''}.`,
@@ -2119,20 +2059,14 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
       action: topWish ? 'View game' : null,
     });
   }
-  // Unplayed games matching top mechanic
-  if (topMechanicEntry) {
-    const unplayedWithMechanic = games.filter(g =>
-      g.status === 'owned' && !g.last_played &&
-      parseList(g.mechanics).includes(topMechanicEntry[0])
-    ).length;
-    if (unplayedWithMechanic > 0) {
-      insightNudges.push({
-        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
-        text: `You love <strong>${escapeHtml(topMechanicEntry[0])}</strong> — but <strong>${unplayedWithMechanic}</strong> ${unplayedWithMechanic !== 1 ? 'games' : 'game'} with that mechanic ${unplayedWithMechanic !== 1 ? 'are' : 'is'} still unplayed.`,
-        gameId: null,
-        action: null,
-      });
-    }
+  const unplayedWithMechanic = stats.unplayed_with_top_mechanic || 0;
+  if (topMechanicName && unplayedWithMechanic > 0) {
+    insightNudges.push({
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+      text: `You love <strong>${escapeHtml(topMechanicName)}</strong> — but <strong>${unplayedWithMechanic}</strong> ${unplayedWithMechanic !== 1 ? 'games' : 'game'} with that mechanic ${unplayedWithMechanic !== 1 ? 'are' : 'is'} still unplayed.`,
+      gameId: null,
+      action: null,
+    });
   }
 
   const insightsHtml = insightNudges.length ? `
@@ -2153,26 +2087,22 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
       </div>`).join('')}
   </div>`;
 
-  // ===== Collection Health Score =====
-  const _ownedBase = games.filter(g => g.status === 'owned' && !g.parent_game_id);
-  const _playedCount = _ownedBase.filter(g => g.last_played).length;
-  const _playedPct = _ownedBase.length ? _playedCount / _ownedBase.length : 0;
-  const _ratedOwned = _ownedBase.filter(g => g.user_rating);
-  const _avgRatingRaw = _ratedOwned.length ? _ratedOwned.reduce((s, g) => s + g.user_rating, 0) / _ratedOwned.length : 0;
-  const _ratingScore = _avgRatingRaw / 10;
-  const _uniqueMechanics = new Set(_ownedBase.flatMap(g => parseList(g.mechanics))).size;
-  const _diversityScore = Math.min(1, _uniqueMechanics / 20);
-  const _healthScore = Math.round((_playedPct * 0.4 + _ratingScore * 0.4 + _diversityScore * 0.2) * 100);
-  const _circ = 251.2;
-  const _targetOffset = Math.round(_circ * (1 - _healthScore / 100));
-  const _healthColor = _healthScore >= 70 ? 'var(--success)' : _healthScore >= 40 ? 'var(--warning)' : 'var(--danger)';
-  const _playedPctLabel = Math.round(_playedPct * 100) + '%';
-  const _healthGrade = _healthScore >= 90 ? 'Excellent' : _healthScore >= 70 ? 'Healthy' : _healthScore >= 40 ? 'Developing' : 'Just Starting';
-
-  // Per-factor bar widths (each factor scored 0–100 independently before weighting)
-  const _playBarPct   = Math.round(_playedPct * 100);
-  const _ratingBarPct = Math.round(_ratingScore * 100);
-  const _diverseBarPct = Math.round(_diversityScore * 100);
+  // ===== Collection Health Score (server-precomputed) =====
+  const {
+    score: _healthScore = 0,
+    play_pct: _playBarPct = 0,
+    rating_score: _ratingBarPct = 0,
+    diversity_score: _diverseBarPct = 0,
+    played_count: _playedCount = 0,
+    owned_base_count: _ownedBaseLen = 0,
+    avg_rating_raw: _avgRatingRaw = 0,
+    unique_mechanics: _uniqueMechanics = 0,
+  } = stats.collection_health ?? {};
+  const _circ           = 251.2;
+  const _targetOffset   = Math.round(_circ * (1 - _healthScore / 100));
+  const _healthColor    = _healthScore >= 70 ? 'var(--success)' : _healthScore >= 40 ? 'var(--warning)' : 'var(--danger)';
+  const _playedPctLabel = _playBarPct + '%';
+  const _healthGrade    = _healthScore >= 90 ? 'Excellent' : _healthScore >= 70 ? 'Healthy' : _healthScore >= 40 ? 'Developing' : 'Just Starting';
 
   const healthScoreHtml = `
     <div class="stats-section" data-section="health">
@@ -2254,7 +2184,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
             <div class="hb-factor-header">
               <span class="hb-label">Play Rate</span>
               <span class="hb-weight">40%</span>
-              <span class="hb-value">${_playedPctLabel} <span class="hb-detail">(${_playedCount} of ${_ownedBase.length})</span></span>
+              <span class="hb-value">${_playedPctLabel} <span class="hb-detail">(${_playedCount} of ${_ownedBaseLen})</span></span>
             </div>
             <div class="hb-bar-track"><div class="stat-bar-fill" style="width:0%;background:${_healthColor}" data-target-width="${_playBarPct}%"></div></div>
           </div>
@@ -2263,7 +2193,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
             <div class="hb-factor-header">
               <span class="hb-label">Avg Rating</span>
               <span class="hb-weight">40%</span>
-              <span class="hb-value">${_ratedOwned.length ? _avgRatingRaw.toFixed(1) + ' / 10' : '<span class="hb-detail">no ratings yet</span>'}</span>
+              <span class="hb-value">${_avgRatingRaw > 0 ? _avgRatingRaw.toFixed(1) + ' / 10' : '<span class="hb-detail">no ratings yet</span>'}</span>
             </div>
             <div class="hb-bar-track"><div class="stat-bar-fill" style="width:0%;background:${_healthColor}" data-target-width="${_ratingBarPct}%"></div></div>
           </div>
@@ -2280,12 +2210,8 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
       </div>
     </div>`;
 
-  // ===== Rating vs BGG Delta =====
-  const _deltaGames = games
-    .filter(g => g.user_rating && g.bgg_rating)
-    .map(g => ({ name: g.name, delta: +(g.user_rating - g.bgg_rating).toFixed(1) }))
-    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-    .slice(0, 8);
+  // ===== Rating vs BGG Delta (server-precomputed) =====
+  const _deltaGames = stats.rating_vs_bgg || [];
   const _maxDelta = Math.max(..._deltaGames.map(g => Math.abs(g.delta)), 1);
   const ratingDeltaHtml = _deltaGames.length >= 3 ? `
     <div class="stats-section" data-section="rating_delta">
@@ -2373,7 +2299,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
         <div class="health-info-popover-inner"><p class="health-info-intro">How many games you've added to your collection each calendar month. Toggle the checkbox to include or exclude wishlist games.</p></div>
       </div>
       <div class="stat-bar-chart" id="added-by-month-chart">
-        ${buildAddedByMonthHtml(games, addedIncludeWishlist)}
+        ${buildAddedByMonthFromEntries(addedIncludeWishlist ? stats.added_by_month : stats.added_by_month_owned_only)}
       </div>
     </div>`;
 
@@ -2408,12 +2334,8 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
       </div>
     </div>` : '';
 
-  // Recently added — top 5 by date_added descending
-  const recentlyAdded = games
-    .filter(g => g.date_added)
-    .sort((a, b) => new Date(b.date_added) - new Date(a.date_added))
-    .slice(0, 5);
-
+  // Recently added — server-precomputed top 5 by date_added
+  const recentlyAdded = stats.recently_added || [];
   const recentlyAddedHtml = recentlyAdded.length ? `
     <div class="stats-section" data-section="recently_added"${!currentPrefs.show_recently_added ? ' style="display:none"' : ''}>
       ${_sectionInfoHeader('Recently Added', 'About Recently Added', '<p class="health-info-intro">The 5 most recently added games, sorted by date added.</p>')}
@@ -2426,16 +2348,12 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
       </div>
     </div>` : '';
 
-  // Shelf of Shame — owned games never played, oldest owned first
-  const neverPlayed = games
-    .filter(g => g.status === 'owned' && !g.last_played)
-    .sort((a, b) => new Date(a.date_added) - new Date(b.date_added));
-  const _npRow = g => {
-    return `<div class="insight-game-row" data-game-id="${g.id}">
+  // Shelf of Shame — server-precomputed list of owned games never played
+  const neverPlayed = stats.never_played_list || [];
+  const _npRow = g => `<div class="insight-game-row" data-game-id="${g.id}">
                <span class="insight-game-name">${escapeHtml(g.name)}</span>
                <span class="insight-game-meta">Owned for ${_ownedFor(g.date_added)}</span>
              </div>`;
-  };
   const neverPlayedHtml = `
     <div class="stats-section" data-section="never_played"${!currentPrefs.show_never_played ? ' style="display:none"' : ''}>
       ${_sectionInfoHeader(`Shelf of Shame (${neverPlayed.length})${neverPlayed.length > 0 ? ' <button class="drilldown-title-btn" data-drilldown="never_played" type="button">View all →</button>' : ''}`, 'About Shelf of Shame', '<p class="health-info-intro">Owned games you\'ve never played, sorted by how long you\'ve had them. Use it as a nudge to finally get them to the table.</p>')}
@@ -2449,7 +2367,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
              </div>
              <button type="button" class="insight-more-btn" data-count="${neverPlayed.length - 10}">+${neverPlayed.length - 10} more</button>` : ''}
            </div>`
-        : `<p class="no-sessions">${games.filter(g => g.status === 'owned').length === 0 ? 'No owned games yet.' : 'All your owned games have been played!'}</p>`}
+        : `<p class="no-sessions">${(stats.by_status.owned || 0) === 0 ? 'No owned games yet.' : 'All your owned games have been played!'}</p>`}
     </div>`;
 
   // Cooling Off — owned base games not played in 90–365 days (server-computed,
@@ -2468,12 +2386,8 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
       </div>
     </div>` : '';
 
-  // Dormant — owned games not played in 12+ months
-  const twelveMonthsAgo = new Date();
-  twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
-  const dormantGames = games
-    .filter(g => g.status === 'owned' && g.last_played && new Date(g.last_played + 'T00:00:00') < twelveMonthsAgo)
-    .sort((a, b) => a.last_played.localeCompare(b.last_played));
+  // Dormant — server-precomputed: owned games not played in 12+ months
+  const dormantGames = stats.dormant_games || [];
   const dormantHtml = dormantGames.length ? `
     <div class="stats-section" data-section="dormant"${!currentPrefs.show_dormant ? ' style="display:none"' : ''}>
       ${_sectionInfoHeader(`Dormant Games (${dormantGames.length})`, 'About Dormant Games', '<p class="health-info-intro">Owned games you haven\'t played in over a year. A good prompt to revisit old favourites — or decide it\'s time to pass them on.</p>')}
@@ -2496,18 +2410,14 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
       </div>
     </div>` : '';
 
-  // Top Mechanics — most common mechanics in owned collection
-  const mechanicCounts = {};
-  games.filter(g => g.status === 'owned').forEach(g => {
-    parseList(g.mechanics).forEach(m => { if (m) mechanicCounts[m] = (mechanicCounts[m] || 0) + 1; });
-  });
-  const topMechanics = Object.entries(mechanicCounts).sort(([, a], [, b]) => b - a).slice(0, 10);
-  const maxMechanic = topMechanics[0]?.[1] || 1;
+  // Top Mechanics — server-precomputed from owned collection
+  const topMechanics = stats.top_mechanics || [];
+  const maxMechanic = topMechanics[0]?.count || 1;
   const topMechanicsHtml = topMechanics.length ? `
     <div class="stats-section" data-section="top_mechanics"${!currentPrefs.show_top_mechanics ? ' style="display:none"' : ''}>
       ${_sectionInfoHeader('Top Mechanics', 'About Top Mechanics', '<p class="health-info-intro">The game mechanics that appear most often across your owned games. Useful for spotting the styles of play you gravitate towards.</p>')}
       <div class="stat-bar-chart">
-        ${topMechanics.map(([name, count]) => `
+        ${topMechanics.map(({ name, count }) => `
           <div class="stat-bar-row" data-drilldown="mechanic" data-mechanic-name="${escapeHtml(name)}" title="Filter by ${escapeHtml(name)}">
             <span class="stat-bar-label">${escapeHtml(name)}</span>
             <div class="stat-bar-track"><div class="stat-bar-fill" style="width:0%" data-target-width="${Math.round(count / maxMechanic * 100)}%"></div></div>

@@ -389,6 +389,218 @@ def get_stats(db: Session = Depends(get_db)):
         for r in shelf_rows
     ]
 
+    # ── Top mechanics (owned base games via junction table) ───────────────────
+    top_mechanic_rows = (
+        db.query(models.Mechanic.name, func.count(models.GameMechanic.game_id).label("cnt"))
+        .join(models.GameMechanic, models.GameMechanic.mechanic_id == models.Mechanic.id)
+        .join(models.Game, models.Game.id == models.GameMechanic.game_id)
+        .filter(models.Game.status == "owned")
+        .group_by(models.Mechanic.name)
+        .order_by(func.count(models.GameMechanic.game_id).desc())
+        .limit(10)
+        .all()
+    )
+    top_mechanics = [schemas.TopMechanicEntry(name=name, count=cnt) for name, cnt in top_mechanic_rows]
+    top_mechanic = top_mechanics[0].name if top_mechanics else None
+
+    # ── Dormant games (owned, last played 12+ months ago) ────────────────────
+    dormant_cutoff = today - timedelta(days=365)
+    dormant_rows = (
+        db.query(models.Game.id, models.Game.name, models.Game.last_played)
+        .filter(
+            models.Game.status == "owned",
+            models.Game.parent_game_id.is_(None),
+            models.Game.last_played.isnot(None),
+            models.Game.last_played < dormant_cutoff,
+        )
+        .order_by(models.Game.last_played.asc())
+        .all()
+    )
+    dormant_games = [
+        schemas.DormantGameEntry(id=r.id, name=r.name, last_played=r.last_played)
+        for r in dormant_rows
+    ]
+
+    # ── Recently added (top 5 by date_added) ─────────────────────────────────
+    recently_added_rows = (
+        db.query(models.Game.id, models.Game.name, models.Game.date_added)
+        .filter(models.Game.date_added.isnot(None))
+        .order_by(models.Game.date_added.desc())
+        .limit(5)
+        .all()
+    )
+    recently_added = [
+        schemas.RecentlyAddedEntry(id=r.id, name=r.name, date_added=r.date_added)
+        for r in recently_added_rows
+    ]
+
+    # ── Never-played list (owned, no sessions ever) ───────────────────────────
+    never_played_rows = (
+        db.query(models.Game.id, models.Game.name, models.Game.date_added)
+        .outerjoin(models.PlaySession, models.PlaySession.game_id == models.Game.id)
+        .filter(
+            models.Game.status == "owned",
+            models.PlaySession.id.is_(None),
+        )
+        .order_by(models.Game.date_added.asc())
+        .all()
+    )
+    never_played_list = [
+        schemas.NeverPlayedEntry(id=r.id, name=r.name, date_added=r.date_added)
+        for r in never_played_rows
+    ]
+
+    # ── Neglected favorite (most-played owned game, not played in 3+ months) ─
+    neglected_favorite = None
+    six_months_ago = today - timedelta(days=180)
+    if session_counts_rows:
+        sc_map_all: dict[int, int] = {gid: cnt for gid, cnt in session_counts_rows}
+        neglected_rows = (
+            db.query(models.Game.id, models.Game.name, models.Game.last_played)
+            .filter(
+                models.Game.status == "owned",
+                models.Game.last_played.isnot(None),
+                models.Game.last_played <= six_months_ago,
+            )
+            .all()
+        )
+        if neglected_rows:
+            best = max(neglected_rows, key=lambda r: (sc_map_all.get(r.id, 0), -r.last_played.toordinal()))
+            months_ago = max(1, round((today - best.last_played).days / 30))
+            neglected_favorite = schemas.NeglectedFavoriteEntry(
+                id=best.id, name=best.name, months_ago=months_ago
+            )
+
+    # ── Rating vs BGG delta (top 8 by abs delta, games with both ratings) ────
+    delta_rows = (
+        db.query(models.Game.id, models.Game.name, models.Game.user_rating, models.Game.bgg_rating)
+        .filter(
+            models.Game.user_rating.isnot(None),
+            models.Game.bgg_rating.isnot(None),
+        )
+        .all()
+    )
+    rating_vs_bgg = sorted(
+        [schemas.RatingDeltaEntry(id=r.id, name=r.name, delta=round(r.user_rating - r.bgg_rating, 1))
+         for r in delta_rows],
+        key=lambda e: abs(e.delta),
+        reverse=True,
+    )[:8]
+
+    # ── Collection health score ───────────────────────────────────────────────
+    owned_base_count = (
+        db.query(func.count(models.Game.id))
+        .filter(models.Game.status == "owned", models.Game.parent_game_id.is_(None))
+        .scalar() or 0
+    )
+    played_base_count = (
+        db.query(func.count(models.Game.id))
+        .filter(
+            models.Game.status == "owned",
+            models.Game.parent_game_id.is_(None),
+            models.Game.last_played.isnot(None),
+        )
+        .scalar() or 0
+    )
+    avg_rating_owned_raw = (
+        db.query(func.avg(models.Game.user_rating))
+        .filter(models.Game.status == "owned", models.Game.parent_game_id.is_(None), models.Game.user_rating.isnot(None))
+        .scalar() or 0.0
+    )
+    unique_mechanics_count = (
+        db.query(func.count(func.distinct(models.GameMechanic.mechanic_id)))
+        .join(models.Game, models.Game.id == models.GameMechanic.game_id)
+        .filter(models.Game.status == "owned", models.Game.parent_game_id.is_(None))
+        .scalar() or 0
+    )
+    _play_pct = (played_base_count / owned_base_count) if owned_base_count else 0.0
+    _rating_score = float(avg_rating_owned_raw) / 10.0
+    _diversity_score = min(1.0, unique_mechanics_count / 20.0)
+    _health_score = round((_play_pct * 0.4 + _rating_score * 0.4 + _diversity_score * 0.2) * 100)
+    collection_health = schemas.CollectionHealth(
+        score=_health_score,
+        play_pct=round(_play_pct * 100),
+        rating_score=round(_rating_score * 100),
+        diversity_score=round(_diversity_score * 100),
+        played_count=played_base_count,
+        owned_base_count=owned_base_count,
+        avg_rating_raw=round(float(avg_rating_owned_raw), 1),
+        unique_mechanics=unique_mechanics_count,
+    )
+
+    # ── Added by month — owned+sold only (no wishlist) ────────────────────────
+    owned_month_counts: dict = {k: 0 for k in month_keys}
+    for iso_month, count in db.query(
+        func.strftime("%Y-%m", models.Game.date_added).label("month"),
+        func.count(models.Game.id).label("count"),
+    ).filter(
+        models.Game.date_added.isnot(None),
+        models.Game.date_added >= window_start,
+        models.Game.status != "wishlist",
+    ).group_by("month").all():
+        key = _iso_month_to_label(iso_month)
+        if key in owned_month_counts:
+            owned_month_counts[key] += count
+
+    added_by_month_owned_only = [
+        schemas.AddedByMonthEntry(month=m, count=c)
+        for m, c in owned_month_counts.items()
+    ]
+
+    # ── Play streaks (derived from sessions_by_day set) ──────────────────────
+    day_set = {r.day for r in day_rows}
+    # Daily streak — count consecutive days backwards from today
+    daily_streak = 0
+    check_day = today
+    while check_day.strftime("%Y-%m-%d") in day_set:
+        daily_streak += 1
+        check_day -= timedelta(days=1)
+
+    # Weekly streak — max consecutive ISO weeks with at least one session
+    def _iso_week(d: date) -> tuple:
+        return d.isocalendar()[:2]  # (year, week_number)
+
+    weeks_with_sessions: set = set()
+    for ds in day_set:
+        weeks_with_sessions.add(_iso_week(date.fromisoformat(ds)))
+    max_weekly_streak = 0
+    run_weekly = 0
+    for w in range(52):
+        week_key = _iso_week(today - timedelta(weeks=w))
+        if week_key in weeks_with_sessions:
+            run_weekly += 1
+            max_weekly_streak = max(max_weekly_streak, run_weekly)
+        else:
+            run_weekly = 0
+    weekly_streak = max_weekly_streak
+
+    # ── Top wishlist game (highest priority) ─────────────────────────────────
+    wishlist_row = (
+        db.query(models.Game.id, models.Game.name)
+        .filter(models.Game.status == "wishlist")
+        .order_by(models.Game.priority.desc().nulls_last(), models.Game.date_added.desc())
+        .first()
+    )
+    top_wishlist_game = (
+        schemas.TopWishlistEntry(id=wishlist_row.id, name=wishlist_row.name)
+        if wishlist_row else None
+    )
+
+    # ── Unplayed owned games with the top mechanic ────────────────────────────
+    unplayed_with_top_mechanic = 0
+    if top_mechanic:
+        unplayed_with_top_mechanic = (
+            db.query(func.count(models.Game.id))
+            .join(models.GameMechanic, models.GameMechanic.game_id == models.Game.id)
+            .join(models.Mechanic, models.Mechanic.id == models.GameMechanic.mechanic_id)
+            .filter(
+                models.Game.status == "owned",
+                models.Game.last_played.is_(None),
+                models.Mechanic.name == top_mechanic,
+            )
+            .scalar() or 0
+        )
+
     logger.info("Stats computed: %d games, %d sessions, %d expansions", total_games, total_sessions, total_expansions)
 
     return schemas.StatsResponse(
@@ -413,6 +625,19 @@ def get_stats(db: Session = Depends(get_db)):
         sessions_by_day=sessions_by_day,
         collection_value=collection_value,
         shelf_warmers=shelf_warmers,
+        top_mechanic=top_mechanic,
+        top_mechanics=top_mechanics,
+        dormant_games=dormant_games,
+        recently_added=recently_added,
+        never_played_list=never_played_list,
+        neglected_favorite=neglected_favorite,
+        rating_vs_bgg=rating_vs_bgg,
+        collection_health=collection_health,
+        added_by_month_owned_only=added_by_month_owned_only,
+        daily_streak=daily_streak,
+        weekly_streak=weekly_streak,
+        top_wishlist_game=top_wishlist_game,
+        unplayed_with_top_mechanic=unplayed_with_top_mechanic,
     )
 
 
@@ -472,6 +697,29 @@ def get_collection_stats(request: Request, db: Session = Depends(get_db)):
         key = label or NO_LOCATION_SENTINEL
         locations[key] = locations.get(key, 0) + int(count)
 
+    # Mechanic and category frequency counts across all owned games (for filter chips)
+    mechanic_count_rows = (
+        db.query(models.Mechanic.name, func.count(models.GameMechanic.game_id).label("cnt"))
+        .join(models.GameMechanic, models.GameMechanic.mechanic_id == models.Mechanic.id)
+        .join(models.Game, models.Game.id == models.GameMechanic.game_id)
+        .filter(models.Game.status == "owned")
+        .group_by(models.Mechanic.name)
+        .order_by(func.count(models.GameMechanic.game_id).desc())
+        .all()
+    )
+    mechanic_counts: dict[str, int] = {name: int(cnt) for name, cnt in mechanic_count_rows}
+
+    category_count_rows = (
+        db.query(models.Category.name, func.count(models.GameCategory.game_id).label("cnt"))
+        .join(models.GameCategory, models.GameCategory.category_id == models.Category.id)
+        .join(models.Game, models.Game.id == models.GameCategory.game_id)
+        .filter(models.Game.status == "owned")
+        .group_by(models.Category.name)
+        .order_by(func.count(models.GameCategory.game_id).desc())
+        .all()
+    )
+    category_counts: dict[str, int] = {name: int(cnt) for name, cnt in category_count_rows}
+
     data = schemas.CollectionStatsResponse(
         total_owned=by_status["owned"],
         total_wishlist=by_status["wishlist"],
@@ -482,6 +730,8 @@ def get_collection_stats(request: Request, db: Session = Depends(get_db)):
         unplayed_count=unplayed_count,
         rated_count=rated_count,
         locations=locations,
+        mechanic_counts=mechanic_counts,
+        category_counts=category_counts,
     )
     resp = JSONResponse(content=data.model_dump())
     resp.headers["ETag"] = etag

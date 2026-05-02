@@ -1078,6 +1078,23 @@ def get_game(game_id: int, db: Session = Depends(get_db)):
     return _attach_parent_name(game, db)
 
 
+@router.get("/{game_id}/session-summary", response_model=schemas.SessionSummaryResponse)
+def get_session_summary(game_id: int, db: Session = Depends(get_db)):
+    get_game_or_404(game_id, db)
+    row = (
+        db.query(
+            func.count(models.PlaySession.id),
+            func.coalesce(func.sum(models.PlaySession.duration_minutes), 0),
+        )
+        .filter(models.PlaySession.game_id == game_id)
+        .first()
+    )
+    return schemas.SessionSummaryResponse(
+        session_count=int(row[0] or 0),
+        total_minutes=int(row[1] or 0),
+    )
+
+
 @router.get("/{game_id}/similar", response_model=List[schemas.GameSuggestion])
 def get_similar_games(game_id: int, db: Session = Depends(get_db)):
     game = get_game_or_404(game_id, db)
