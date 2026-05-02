@@ -1347,7 +1347,7 @@
       showUndoToast(`"${gameName}" removed.`, async () => {
         if (!deletedGame) return;
         try {
-          const { id: _id, date_added: _da, date_modified: _dm, image_cached: _ic, parent_game_name: _pgn, ...payload } = deletedGame;
+          const { id: _id, date_modified: _dm, image_cached: _ic, parent_game_name: _pgn, ...payload } = deletedGame;
           const restored = await API.createGame(payload);
           state.games.push(restored);
           state.games = sortGames(state.games, state.sortBy, state.sortDir);
@@ -1770,7 +1770,7 @@
           <div class="players-list" id="players-list"></div>
         </div>`;
 
-      inner.querySelector('#players-modal-close').addEventListener('click', close);
+      inner.querySelector('#players-modal-close').addEventListener('click', (e) => { e.stopPropagation(); close(); });
 
       const addInput = inner.querySelector('#new-player-name');
       const addBtn   = inner.querySelector('#add-player-btn');
@@ -2260,7 +2260,7 @@
             </li>`).join('')}
         </ul>`;
 
-      el.querySelector('#shortcuts-modal-close').addEventListener('click', closeModal);
+      el.querySelector('#shortcuts-modal-close').addEventListener('click', (e) => { e.stopPropagation(); closeModal(); });
       openModal(el);
     });
   }
@@ -2409,7 +2409,7 @@
 
       const diffEl = f('m-difficulty');
       const diff = parseFloat(diffEl.value);
-      if (diffEl.value && (diff < 1 || diff > 5)) {
+      if (diffEl.value && (isNaN(diff) || diff < 1 || diff > 5)) {
         setFieldError(e('difficulty'), diffEl, 'Must be between 1 and 5'); valid = false;
       } else { clearFieldError(e('difficulty'), diffEl); }
 
@@ -2491,6 +2491,7 @@
         min_playtime:      parseInt(fd.get('min_playtime'), 10) || null,
         max_playtime:      parseInt(fd.get('max_playtime'), 10) || null,
         difficulty:        parseFloat(fd.get('difficulty')) || null,
+        bgg_id:            parseInt(fd.get('bgg_id'), 10) || null,
         // If a file is selected, skip the URL — image will be uploaded after creation
         image_url:         file ? null : (fd.get('image_url') || null),
         description:       fd.get('description') || null,
@@ -2803,7 +2804,7 @@
     }
 
     backdrop.addEventListener('click', close);
-    inner.querySelector('#game-night-close').addEventListener('click', close);
+    inner.querySelector('#game-night-close').addEventListener('click', (e) => { e.stopPropagation(); close(); });
 
     inner.querySelector('#gn-suggest-btn').addEventListener('click', async () => {
       const playerCount = parseInt(inner.querySelector('#gn-players').value, 10) || null;
@@ -3708,7 +3709,7 @@
         </div>
       </div>`;
 
-    el.querySelector('#share-modal-close').addEventListener('click', closeModal);
+    el.querySelector('#share-modal-close').addEventListener('click', (e) => { e.stopPropagation(); closeModal(); });
 
     // PDF export button in share modal
     const staticExportBtn = el.querySelector('#share-export-pdf-btn');
