@@ -11,6 +11,10 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Server-side stats aggregations** — the stats endpoint now precomputes and returns top mechanics (top 10 by count across owned games), dormant games (owned base games not played in 12+ months), recently added (top 5 owned/sold base games by date added), never-played list (owned base games with no sessions), neglected favorite (most-played owned game inactive for 6+ months), rating-vs-BGG delta (top 8 by absolute difference), collection health score, added-by-month for owned games only, daily and weekly play streaks, top wishlist game, and unplayed count matching the top mechanic. These replace equivalent client-side passes over the full game list.
+- **Mechanic and category frequency counts on collection stats** — `GET /api/collection/stats` now returns `mechanic_counts` and `category_counts` dicts (name → game count, sorted by frequency) so the collection filter chips no longer need to iterate all loaded games client-side.
+- **Zero-filled player stats month series** — `GET /api/players/{id}/stats` now returns `sessions_by_month` and `win_rate_by_month` pre-filled for the trailing 12 calendar months, inserting zero-count entries for months with no activity. Bar charts render a full 12-column grid without client-side alignment.
+- **Game session summary endpoint** — new `GET /api/games/{id}/session-summary` returns `{ session_count, total_minutes }` for a game. Used internally for milestone checks; avoids fetching every session object just to count them.
 - **Player sessions drill-down** — leaderboard entries in the player profile are now clickable, opening a modal list of all sessions for that player with cover thumbnail, game name, date, duration, players, scores, and notes. Backed by a new `GET /api/players/{id}/sessions` endpoint; returns an empty list when no sessions are found.
 - **Skip-to-content link** — a visually hidden `<a href="#main-content">` link appears on focus, letting keyboard users jump past the header without tabbing through every nav element.
 - **Screen reader heading for collection view** — a visually hidden `<h1>My Board Game Collection</h1>` gives screen reader users a clear landmark when landing on the collection tab.
@@ -20,6 +24,8 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Stats page no longer fetches the full game list** — the stats view previously loaded up to 5 000 games in parallel with the stats request, then iterated the full array for every aggregation. All heavy computations are now server-side; the extra `GET /api/games/` call on stats load has been removed.
+- **Player session covers use primary image over BGG thumbnail** — the player sessions drill-down modal now prefers the locally cached `image_url` when available and falls back to `thumbnail_url` (the small BGG thumbnail) only when the primary image is absent, showing higher-quality covers in the session history list.
 - **Real-time inline validation on the add-game form** — the name, min/max players, min/max playtime, and difficulty fields now show errors while typing, not only on submit. A green border appears when the value becomes valid. All `.valid` markers are cleared when the form resets after a successful save.
 - **Status badge icons** — the Wishlist badge now shows a `★` prefix and the Sold badge shows a `✓` prefix via CSS `::before`, improving scannability in the card grid and list view.
 - **Focus indicator enhanced** — `:focus-visible` now adds a 4 px `box-shadow` halo alongside the existing outline, making keyboard focus position much easier to track.
@@ -35,6 +41,9 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Goals game-select dropdown always empty** — `buildStatsView` was refactored to receive an empty game list, but the goals section's "Game" dropdown still built its `<option>` elements from that parameter. Selecting the "Game Sessions" goal type showed an empty picker with no games, and saving raised "Please select a game" regardless. The dropdown now reads from the loaded game state directly.
+- **Recently Added included wishlist games and expansions** — the server query had no status or parent-game filter, so wishlist entries and expansion packs could appear at the top of the "Recently Added" stats section. The query now restricts to owned and sold base games only.
+- **Shelf of Shame included expansion games** — the never-played query lacked the `parent_game_id IS NULL` guard present on every other ownership-scoped query in the stats endpoint (dormant, health score, top mechanics, etc.). Expansions that had never been played individually were incorrectly listed alongside base games.
 - **Event propagation on modal close and back buttons** — clicking the close (×) or back (‹) buttons in modals previously bubbled the event to parent listeners, which could trigger accidental navigation or re-open the modal. `stopPropagation()` is now called before invoking the handler. The fix now covers all modals: players, shortcuts, game night, and share (previously only the game detail modal was patched).
 - **BGG ID lost on add-game form submission** — selecting a game from BGG search populated the hidden `bgg_id` field via `_prefillAddGameForm`, but the submit handler never read it into the API payload. Games added via BGG lookup were stored without a BGG ID, breaking "Refresh from BGG", BGG links, and duplicate detection.
 - **Difficulty field accepted non-numeric input silently** — `parseFloat("abc")` returns `NaN`, and `NaN < 1` evaluates to `false`, so arbitrary text passed client-side validation without an error message. An `isNaN` guard is now included alongside the range check.
