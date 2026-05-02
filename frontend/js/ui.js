@@ -2672,7 +2672,7 @@ function buildStatsView(stats, games, prefs = {}, onPrefsChange = null, goals = 
             <label class="form-label">Game</label>
             <select id="goal-game-select" class="select">
               <option value="">Select a game…</option>
-              ${(games || []).filter(g => g.status === 'owned').sort((a,b) => a.name.localeCompare(b.name))
+              ${(typeof state !== 'undefined' ? state.games : []).filter(g => g.status === 'owned').sort((a,b) => a.name.localeCompare(b.name))
                 .map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('')}
             </select>
           </div>

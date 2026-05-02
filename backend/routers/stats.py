@@ -421,10 +421,13 @@ def get_stats(db: Session = Depends(get_db)):
         for r in dormant_rows
     ]
 
-    # ── Recently added (top 5 by date_added) ─────────────────────────────────
+    # ── Recently added (top 5 owned/sold base games by date_added) ───────────
     recently_added_rows = (
         db.query(models.Game.id, models.Game.name, models.Game.date_added)
-        .filter(models.Game.date_added.isnot(None))
+        .filter(
+            models.Game.status != "wishlist",
+            models.Game.parent_game_id.is_(None),
+        )
         .order_by(models.Game.date_added.desc())
         .limit(5)
         .all()
@@ -434,12 +437,13 @@ def get_stats(db: Session = Depends(get_db)):
         for r in recently_added_rows
     ]
 
-    # ── Never-played list (owned, no sessions ever) ───────────────────────────
+    # ── Never-played list (owned base games, no sessions ever) ───────────────
     never_played_rows = (
         db.query(models.Game.id, models.Game.name, models.Game.date_added)
         .outerjoin(models.PlaySession, models.PlaySession.game_id == models.Game.id)
         .filter(
             models.Game.status == "owned",
+            models.Game.parent_game_id.is_(None),
             models.PlaySession.id.is_(None),
         )
         .order_by(models.Game.date_added.asc())
@@ -450,7 +454,7 @@ def get_stats(db: Session = Depends(get_db)):
         for r in never_played_rows
     ]
 
-    # ── Neglected favorite (most-played owned game, not played in 3+ months) ─
+    # ── Neglected favorite (most-played owned game, not played in 6+ months) ─
     neglected_favorite = None
     six_months_ago = today - timedelta(days=180)
     if session_counts_rows:
