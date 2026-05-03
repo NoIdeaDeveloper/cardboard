@@ -107,7 +107,11 @@ html.view-transitioning *::after {
 
 html { font-size: 16px; }
 
+html, body { margin: 0; padding: 0; }
+
 body {
+  display: flex;
+  flex-direction: column;
   font-family: var(--font-body);
   background: var(--bg);
   background-image: radial-gradient(ellipse at 50% 0%, rgba(201,168,76,0.05) 0%, transparent 55%);
@@ -116,6 +120,7 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* Subtle noise/grain texture overlay for premium feel */
@@ -149,6 +154,7 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   box-shadow: 0 2px 24px rgba(0,0,0,0.4);
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .header-inner {
@@ -223,6 +229,7 @@ a:hover { color: var(--accent-2); text-decoration: underline; }
 /* ===== Footer ===== */
 .footer {
   padding: 24px 0;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   text-align: center;
   border-top: 1px solid var(--border);
   margin-top: 48px;
@@ -321,6 +328,7 @@ button.footer-link {
 
 /* ===== Main Layout ===== */
 .main {
+  flex: 1;
   max-width: 1400px;
   margin: 0 auto;
   padding: 28px 24px;
@@ -5163,7 +5171,7 @@ img.player-profile-avatar { display: block; }
 @media (max-width: 768px) and (orientation: landscape) {
   .modal-container { max-height: 96vh; }
   .main { padding: 16px; }
-  .header { padding: 6px 0; }
+  .header { padding: 6px 0; padding-top: max(6px, env(safe-area-inset-top, 0px)); }
 }
 
 /* ===== Trophy Shelf Badges (modal) ===== */
