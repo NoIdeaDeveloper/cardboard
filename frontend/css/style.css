@@ -1978,37 +1978,40 @@ button.footer-link {
 .modal-close svg { width: 16px; height: 16px; }
 .modal-close:hover { background: var(--overlay); }
 
-/* prev/next navigation buttons inside modal hero */
-.modal-nav-buttons {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 3;
+/* prev/next navigation bar below modal hero */
+.modal-nav-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background: var(--bg-3);
+  border-bottom: 1px solid var(--border);
+  min-height: 38px;
 }
+
 .modal-nav-btn {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--overlay-sm);
-  border: 1px solid var(--border);
-  color: var(--text);
-  cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
-  transition: background var(--transition), opacity var(--transition);
-  pointer-events: auto;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-full);
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-2);
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+  max-width: 48%;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
-.modal-nav-btn svg { width: 18px; height: 18px; }
-.modal-nav-btn:hover { background: var(--overlay); border-color: var(--accent); }
-.modal-nav-btn:disabled { opacity: 0.25; cursor: default; background: var(--overlay-sm); border-color: var(--border); }
-.modal-nav-btn:disabled:hover { background: var(--overlay-sm); border-color: var(--border); }
-.modal-nav-prev { left: 12px; }
-.modal-nav-next { right: 12px; }
-.modal-hero-placeholder .modal-nav-btn { background: var(--overlay-strong); border-color: var(--border); }
+.modal-nav-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+.modal-nav-btn:hover { background: var(--bg-4); color: var(--accent); border-color: var(--border); }
+
+.modal-nav-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .modal-back-btn {
   position: absolute;

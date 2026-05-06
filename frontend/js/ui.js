@@ -308,28 +308,26 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
   // Hero
   const _heroImgSrc = game.thumbnail_url || game.image_url;
 
-  const _navButtonsHtml = navInfo && (navInfo.prevGame || navInfo.nextGame)
-    ? `<div class="modal-nav-buttons">
+  const _navBarHtml = navInfo && (navInfo.prevGame || navInfo.nextGame)
+    ? `<div class="modal-nav-bar">
         ${navInfo.prevGame
-          ? `<button class="modal-nav-btn modal-nav-prev" aria-label="Previous: ${escapeHtml(navInfo.prevGame.name)}" title="Previous: ${escapeHtml(navInfo.prevGame.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>`
-          : `<button class="modal-nav-btn modal-nav-prev" disabled aria-label="No previous game"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>`}
+          ? `<button class="modal-nav-btn modal-nav-prev" aria-label="Previous: ${escapeHtml(navInfo.prevGame.name)}" title="Previous: ${escapeHtml(navInfo.prevGame.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg><span class="modal-nav-label">${escapeHtml(navInfo.prevGame.name)}</span></button>`
+          : `<span></span>`}
         ${navInfo.nextGame
-          ? `<button class="modal-nav-btn modal-nav-next" aria-label="Next: ${escapeHtml(navInfo.nextGame.name)}" title="Next: ${escapeHtml(navInfo.nextGame.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>`
-          : `<button class="modal-nav-btn modal-nav-next" disabled aria-label="No next game"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>`}
+          ? `<button class="modal-nav-btn modal-nav-next" aria-label="Next: ${escapeHtml(navInfo.nextGame.name)}" title="Next: ${escapeHtml(navInfo.nextGame.name)}"><span class="modal-nav-label">${escapeHtml(navInfo.nextGame.name)}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>`
+          : `<span></span>`}
       </div>`
     : '';
 
   const heroHtml = isSafeUrl(_heroImgSrc)
     ? `<div class="modal-hero" data-bg-url="${escapeHtml(_heroImgSrc)}">
         <div class="modal-hero-overlay"></div>
-        ${_navButtonsHtml}
         <button class="modal-close" aria-label="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>`
     : `<div class="modal-hero modal-hero-placeholder">
         ${placeholderSvg()}
-        ${_navButtonsHtml}
         <button class="modal-close" aria-label="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -684,6 +682,7 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
 
   el.innerHTML = `
     ${heroHtml}
+    ${_navBarHtml}
     ${trophyShelfHtml}
     <div class="modal-body">
       <div class="modal-title-row">
