@@ -1034,6 +1034,101 @@ async def restore_backup(file: UploadFile = File(...)):
             safe_delete_file(tmp_zip.name + ".restore.db")
 
 
+@router.post("/restore/preview", status_code=200)
+async def preview_restore(file: UploadFile = File(...)):
+    """
+    Preview a ZIP backup before restoring. Returns counts and game list
+    so the user can verify they are uploading the right backup.
+    Does NOT modify any data.
+    """
+    validate_file_extension(file.filename or "", {".zip"}, "Only .zip backup files are allowed")
+
+    tmp_zip = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    try:
+        total = 0
+        while True:
+            chunk = await file.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > RESTORE_MAX_BYTES:
+                tmp_zip.close()
+                raise HTTPException(status_code=413, detail="Backup file too large (max 500 MB)")
+            tmp_zip.write(chunk)
+        tmp_zip.close()
+
+        with zipfile.ZipFile(tmp_zip.name, "r") as zf:
+            names = zf.namelist()
+            if "cardboard.db" not in names:
+                raise HTTPException(status_code=422, detail="Invalid backup: cardboard.db not found in ZIP")
+
+            db_tmp = tmp_zip.name + ".preview.db"
+            with zf.open("cardboard.db") as src, open(db_tmp, "wb") as dst:
+                dst.write(src.read())
+
+            try:
+                conn = sqlite3.connect(db_tmp)
+                integrity = conn.execute("PRAGMA integrity_check").fetchone()
+                if not integrity or integrity[0] != "ok":
+                    conn.close()
+                    raise HTTPException(status_code=422, detail="Backup database failed integrity check")
+
+                game_count = conn.execute("SELECT COUNT(*) FROM games").fetchone()[0]
+                session_count = conn.execute("SELECT COUNT(*) FROM play_sessions").fetchone()[0]
+                player_count = conn.execute("SELECT COUNT(*) FROM players").fetchone()[0]
+
+                owned_count = 0
+                wishlist_count = 0
+                sold_count = 0
+                try:
+                    owned_count = conn.execute("SELECT COUNT(*) FROM games WHERE status = 'owned'").fetchone()[0]
+                    wishlist_count = conn.execute("SELECT COUNT(*) FROM games WHERE status = 'wishlist'").fetchone()[0]
+                    sold_count = conn.execute("SELECT COUNT(*) FROM games WHERE status = 'sold'").fetchone()[0]
+                except Exception:
+                    pass
+
+                # Get top 15 games by name for preview
+                try:
+                    games_preview = [
+                        row[0] for row in
+                        conn.execute("SELECT name FROM games ORDER BY name LIMIT 15").fetchall()
+                    ]
+                except Exception:
+                    games_preview = []
+
+                # Get media file count from ZIP
+                media_count = sum(
+                    1 for n in names
+                    if any(n.startswith(d + "/") for d in ["images", "gallery", "instructions", "avatars"])
+                    and not n.endswith("/")
+                )
+
+                conn.close()
+
+                return {
+                    "game_count": game_count,
+                    "session_count": session_count,
+                    "player_count": player_count,
+                    "owned_count": owned_count,
+                    "wishlist_count": wishlist_count,
+                    "sold_count": sold_count,
+                    "games_preview": games_preview,
+                    "media_file_count": media_count,
+                }
+            finally:
+                if os.path.exists(db_tmp):
+                    os.remove(db_tmp)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Preview failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to preview backup")
+    finally:
+        safe_delete_file(tmp_zip.name)
+        if os.path.exists(tmp_zip.name + ".preview.db"):
+            safe_delete_file(tmp_zip.name + ".preview.db")
+
+
 @router.get("/bgg-search")
 def bgg_search(request: Request, q: str = Query(..., min_length=1, max_length=200)):
     _check_bgg_rate_limit(request)
@@ -1051,8 +1146,10 @@ def bgg_search(request: Request, q: str = Query(..., min_length=1, max_length=20
             name = name_el.get("value", "").strip() if name_el is not None else ""
             year_el = item.find("yearpublished")
             year = year_el.get("value") if year_el is not None else None
+            thumb_val = item.get("thumbnail") or item.findtext("thumbnail")
+            thumbnail = ("https:" + thumb_val) if thumb_val and thumb_val.startswith("//") else thumb_val
             if bgg_id and name:
-                results.append({"bgg_id": bgg_id, "name": name, "year_published": int(year) if year else None})
+                results.append({"bgg_id": bgg_id, "name": name, "year_published": int(year) if year else None, "thumbnail": thumbnail})
         return results
     except Exception as exc:
         logger.warning("BGG search failed (%s): %s", type(exc).__name__, exc)

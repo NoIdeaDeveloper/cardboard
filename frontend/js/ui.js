@@ -102,6 +102,7 @@ function buildGameCard(game) {
       <div class="card-hover-actions">
         <button class="card-hover-btn card-hover-view" type="button" title="View game">View</button>
         ${game.status === 'owned' ? `<button class="card-hover-btn card-hover-log quick-log-btn" type="button" title="Log a play">+ Log</button>` : ''}
+        ${game.status === 'owned' && game.session_count > 0 ? `<button class="card-hover-btn card-hover-repeat quick-repeat-btn" type="button" title="Repeat last session">↻ Repeat</button>` : ''}
         ${game.status === 'wishlist' ? `<button class="card-hover-btn quick-owned-btn" type="button" title="Move to collection">✓ Own It</button>` : ''}
       </div>
     </div>
@@ -187,7 +188,7 @@ function buildGameListItem(game) {
 
 // ===== Modal =====
 
-function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDeleteSession, onUpdateSession, onUploadInstructions, onDeleteInstructions, onUploadImage, onDeleteImage, images, onUploadGalleryImage, onDeleteGalleryImage, onReorderGalleryImages, onAddGalleryImageFromUrl, onUpdateGalleryImageCaption, mode = 'view', onSwitchToEdit, onSwitchToView, allGames = [], onOpenGame = null, onShareGame = null, onCloseModal = closeModal) {
+function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDeleteSession, onUpdateSession, onUploadInstructions, onDeleteInstructions, onUploadImage, onDeleteImage, images, onUploadGalleryImage, onDeleteGalleryImage, onReorderGalleryImages, onAddGalleryImageFromUrl, onUpdateGalleryImageCaption, mode = 'view', onSwitchToEdit, onSwitchToView, allGames = [], onOpenGame = null, onShareGame = null, onCloseModal = closeModal, navInfo = null) {
   const el = document.createElement('div');
 
   const categories = parseList(game.categories);
@@ -306,15 +307,29 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
 
   // Hero
   const _heroImgSrc = game.thumbnail_url || game.image_url;
+
+  const _navButtonsHtml = navInfo && (navInfo.prevGame || navInfo.nextGame)
+    ? `<div class="modal-nav-buttons">
+        ${navInfo.prevGame
+          ? `<button class="modal-nav-btn modal-nav-prev" aria-label="Previous: ${escapeHtml(navInfo.prevLabel)}" title="Previous: ${escapeHtml(navInfo.prevLabel)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>`
+          : `<button class="modal-nav-btn modal-nav-prev" disabled aria-label="No previous game"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>`}
+        ${navInfo.nextGame
+          ? `<button class="modal-nav-btn modal-nav-next" aria-label="Next: ${escapeHtml(navInfo.nextLabel)}" title="Next: ${escapeHtml(navInfo.nextLabel)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>`
+          : `<button class="modal-nav-btn modal-nav-next" disabled aria-label="No next game"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>`}
+      </div>`
+    : '';
+
   const heroHtml = isSafeUrl(_heroImgSrc)
     ? `<div class="modal-hero" data-bg-url="${escapeHtml(_heroImgSrc)}">
         <div class="modal-hero-overlay"></div>
+        ${_navButtonsHtml}
         <button class="modal-close" aria-label="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>`
     : `<div class="modal-hero modal-hero-placeholder">
         ${placeholderSvg()}
+        ${_navButtonsHtml}
         <button class="modal-close" aria-label="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -760,6 +775,13 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
       </div>` : ''}
 
       ${actionsSectionHtml}
+
+      <div class="modal-close-bar">
+        <button class="btn btn-ghost btn-sm modal-close-sticky-btn" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          Close
+        </button>
+      </div>
     </div>`;
 
   // Apply modal-hero background image via JS to avoid CSS injection via HTML entity decoding
@@ -769,6 +791,14 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
   // ===== Wire events =====
 
   el.querySelector('.modal-close').addEventListener('click', (e) => { e.stopPropagation(); onCloseModal(); });
+  const stickyClose = el.querySelector('.modal-close-sticky-btn');
+  if (stickyClose) stickyClose.addEventListener('click', (e) => { e.stopPropagation(); onCloseModal(); });
+  if (navInfo) {
+    const prevBtn = el.querySelector('.modal-nav-prev:not([disabled])');
+    const nextBtn = el.querySelector('.modal-nav-next:not([disabled])');
+    if (prevBtn && navInfo.onPrev) prevBtn.addEventListener('click', (e) => { e.stopPropagation(); navInfo.onPrev(); });
+    if (nextBtn && navInfo.onNext) nextBtn.addEventListener('click', (e) => { e.stopPropagation(); navInfo.onNext(); });
+  }
   const deleteGameBtn = el.querySelector('#delete-game-btn');
   deleteGameBtn.addEventListener('click', () => withLoading(deleteGameBtn, () => onDelete(game.id, game.name), 'Removing…'));
 
@@ -871,6 +901,7 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
     const deleteBtn = e.target.closest('.session-delete');
     if (deleteBtn) {
       const sessionId = parseInt(deleteBtn.dataset.sessionId, 10);
+      const capturedData = sessions.find(s => s.id === sessionId);
       onDeleteSession(sessionId, game.id, () => {
         const item = el.querySelector(`.session-item[data-session-id="${sessionId}"]`);
         if (item) item.remove();
@@ -880,7 +911,7 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
             <span class="no-sessions-text">No sessions logged yet.<br>Log your first play to start tracking.</span>
           </div>`;
         }
-      });
+      }, capturedData);
       return;
     }
 

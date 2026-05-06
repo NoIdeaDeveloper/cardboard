@@ -212,6 +212,7 @@ const API = {
   // Backup
   downloadBackup:     () => _triggerDownload(`${API_BASE}/games/backup`),
   downloadJsonBackup: () => _triggerDownload(`${API_BASE}/games/backup/json`),
+  previewRestore:     (file) => uploadFile('/games/restore/preview', file),
   restoreBackup:      (file) => uploadFile('/games/restore', file),
 
   // Persistent user settings

@@ -11,6 +11,44 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Backup restore preview** — selecting a backup ZIP now shows a preview dialog before committing: game count, session count, player count, media file count, status breakdown (owned / wishlist / sold), and the first 15 game names. A second confirmation is required before any data is replaced.
+- **BGG search thumbnails** — game thumbnails from BoardGameGeek are now shown inline in the BGG search results list, making it easier to confirm the right game before importing.
+- **Compact quick-log popover** — clicking "+ Log" on a game card now opens a small popover with date, rating, and duration fields rather than the full overlay form. A "More" button still opens the full form if needed.
+- **Repeat last session button** — owned games with at least one prior session show a "↻ Repeat" button on the card hover actions. It logs a new session today, copying player list, duration, and rating from the most recent session.
+- **Modal prev/next navigation** — left and right arrow buttons (and keyboard ← / →) let users navigate between games without closing and reopening the detail modal.
+- **Bulk shift-click selection** — holding Shift while clicking a game card in bulk-select mode now selects or deselects the entire range between the last clicked card and the current one.
+- **Select All in bulk toolbar** — a "Select All / Deselect All" toggle button appears in the bulk action toolbar.
+- **Undo for bulk delete** — a toast with an undo action appears after a bulk delete, allowing the removed games to be recreated.
+- **Undo for quick status change** — moving a game to "Owned" via the card's quick-action button now shows an undo toast.
+- **Undo for session delete** — deleting a session from the game modal now shows an undo toast that restores the session via the API.
+- **Undo for player delete** — removing a player from the players modal now shows an undo toast that re-creates the player.
+- **Optimistic UI for status changes and session logging** — quick status changes and session logs are reflected in the collection immediately rather than waiting for the server round-trip; changes are rolled back if the request fails.
+- **Stats sections drag-to-reorder** — stats sections can be dragged into a custom order; the new order is persisted to `localStorage`.
+- **Stats prefetch on nav hover** — hovering over the Stats nav button begins fetching stats in the background so the view renders faster when navigated to.
+- **Pause mode** — a "Pause" button in the footer freezes streak and heat tracking for vacations or breaks. A banner is shown while paused with a one-click Resume button. State is persisted to `localStorage` and synced to server settings.
+- **Filter toggle button** — a funnel icon button next to the search bar opens and closes the filter panel. A badge shows the count of active filters when the panel is closed.
+- **Filter summary bar** — the filter panel now shows a summary line with owned / wishlist / sold counts while open.
+- **Search autocomplete** — typing in the collection search box shows a dropdown of matching game names from the local collection; keyboard navigation (↑ ↓ Enter Esc) is supported.
+- **Tooltip system for toolbar buttons** — icon buttons in the collection toolbar use CSS `::after` tooltips via `data-tooltip`, replacing `title` attributes.
+- **Keyboard shortcut `/` to focus search** — pressing `/` anywhere on the collection view focuses the search input.
+- **Sticky close button in modals (mobile)** — a floating Close button sticks to the bottom of the game detail modal and players modal on mobile, so users don't need to scroll back to the top to dismiss.
+- **Mobile form wizard for Add Game** — on screens ≤ 768 px the add-game form is split into four numbered steps (Basic Info → Players & Time → Tags & Labels → Ownership) with Back / Next buttons and step indicators. The full form remains visible on desktop.
+- **Game night dismiss button** — individual game suggestions in the Game Night modal can now be dismissed with an × button; dismissed games animate out and a "Reset & re-roll" option appears when all suggestions are dismissed.
+
+### Changed
+
+- **Game night re-roll** — the suggest button now fetches a fresh set of suggestions rather than replacing the rendered list in-place, and a "🔄 Re-roll with new games" link appears when some suggestions have been dismissed.
+- **Sort direction uses `data-tooltip`** — the sort-direction button tooltip now updates via `data-tooltip` (CSS tooltip system) instead of `title`.
+
+### Fixed
+
+- **Add Game submit button hidden on desktop after form wizard init** — `_initFormWizard` called `showStep(0)` unconditionally, setting `submitBtn.style.display = 'none'` as an inline style that overrode the CSS rule on desktop, making the form impossible to submit without a mobile breakpoint.
+- **Restore same backup file unresponsive after canceling preview** — the restore file input was never cleared after the preview dialog was dismissed, so selecting the same file a second time did not fire the `change` event.
+- **Backup integrity check result not inspected** — the `preview_restore` endpoint ran `PRAGMA integrity_check` but discarded the result; a corrupt backup database would silently pass validation and return garbage counts. The result is now verified and a 422 is returned on failure.
+- **Unnecessary API call on every page load from pause mode sync** — `_syncPauseUI()` was called at startup and unconditionally pushed the pause-mode value to the server settings endpoint, even when the value had not changed. Server sync is now only performed when the user actually toggles the setting.
+
+---
+
 - **Server-side stats aggregations** — the stats endpoint now precomputes and returns top mechanics (top 10 by count across owned games), dormant games (owned base games not played in 12+ months), recently added (top 5 owned/sold base games by date added), never-played list (owned base games with no sessions), neglected favorite (most-played owned game inactive for 6+ months), rating-vs-BGG delta (top 8 by absolute difference), collection health score, added-by-month for owned games only, daily and weekly play streaks, top wishlist game, and unplayed count matching the top mechanic. These replace equivalent client-side passes over the full game list.
 - **Mechanic and category frequency counts on collection stats** — `GET /api/collection/stats` now returns `mechanic_counts` and `category_counts` dicts (name → game count, sorted by frequency) so the collection filter chips no longer need to iterate all loaded games client-side.
 - **Zero-filled player stats month series** — `GET /api/players/{id}/stats` now returns `sessions_by_month` and `win_rate_by_month` pre-filled for the trailing 12 calendar months, inserting zero-count entries for months with no activity. Bar charts render a full 12-column grid without client-side alignment.

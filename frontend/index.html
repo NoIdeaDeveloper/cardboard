@@ -37,6 +37,12 @@
     </div>
   </header>
 
+  <!-- Pause mode indicator -->
+  <div class="pause-banner" id="pause-banner" style="display:none">
+    <span class="pause-banner-text">Streak & heat tracking paused</span>
+    <button class="pause-banner-resume" id="pause-banner-resume">Resume</button>
+  </div>
+
   <main class="main" id="main-content">
     <!-- Collection View -->
     <section id="view-collection" class="view active">
@@ -45,10 +51,15 @@
         <div class="search-wrapper">
           <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           <input type="text" id="collection-search" class="search-input" placeholder="Search your collection…" autocomplete="off" aria-label="Search your collection" />
-          <button class="clear-search" id="clear-search" title="Clear search" style="display:none">
+            <button class="clear-search" id="clear-search" data-tooltip="Clear search (Esc)" style="display:none">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
+          <div class="search-autocomplete" id="search-autocomplete" style="display:none"></div>
         </div>
+        <button class="icon-btn filter-toggle-btn" id="filter-toggle-btn" data-tooltip="Show filters" aria-label="Toggle filters" aria-pressed="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          <span class="filter-badge" id="filter-badge" style="display:none"></span>
+        </button>
         <div class="toolbar-controls">
           <div class="sort-group">
             <label class="sort-label" for="sort-by">Sort by</label>
@@ -65,22 +76,22 @@
               <option value="priority">Wishlist Priority</option>
               <option value="heat_level">Hot</option>
             </select>
-            <button id="sort-dir" class="icon-btn sort-dir-btn" title="Toggle sort direction" aria-label="Toggle sort direction" data-dir="asc">
+            <button id="sort-dir" class="icon-btn sort-dir-btn" data-tooltip="Sort ascending" aria-label="Toggle sort direction" data-dir="asc">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M7 12h10M11 18h2"/></svg>
             </button>
           </div>
-          <button class="icon-btn" id="show-expansions-btn" title="Show expansions" aria-label="Show expansions" aria-pressed="false">
+          <button class="icon-btn" id="show-expansions-btn" data-tooltip="Show expansions" aria-label="Show expansions" aria-pressed="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h7"/><path d="M15 15l3 3 3-3"/><line x1="18" y1="18" x2="18" y2="12"/></svg>
           </button>
           <div class="view-toggle" role="group" aria-label="View mode">
-            <button class="icon-btn active" id="view-grid" title="Grid view" aria-label="Grid view">
+            <button class="icon-btn active" id="view-grid" data-tooltip="Grid view" aria-label="Grid view">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
             </button>
-            <button class="icon-btn" id="view-list" title="List view" aria-label="List view">
+            <button class="icon-btn" id="view-list" data-tooltip="List view" aria-label="List view">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
             </button>
           </div>
-          <button class="icon-btn" id="bulk-select-toggle" title="Select games for bulk actions" aria-label="Select games for bulk actions" aria-pressed="false">
+          <button class="icon-btn" id="bulk-select-toggle" data-tooltip="Select games for bulk actions" aria-label="Select games for bulk actions" aria-pressed="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="4" height="4" rx="1"/><polyline points="9 7 15 7"/><rect x="3" y="11" width="4" height="4" rx="1"/><polyline points="9 13 21 13"/><rect x="3" y="17" width="4" height="4" rx="1"/><polyline points="9 19 17 19"/></svg>
           </button>
         </div>
@@ -95,6 +106,7 @@
       <!-- Advanced filter panel -->
       <div class="filter-panel" id="filter-panel">
         <div class="filter-panel-inner">
+          <div class="filter-summary" id="filter-summary"></div>
           <button class="filter-pill" id="filter-never-played">Never Played</button>
           <div class="filter-field">
             <label class="filter-label" for="filter-players">Players</label>
@@ -199,6 +211,14 @@
         </div>
 
         <form id="manual-form" class="game-form">
+
+          <!-- Wizard step indicators (visible only on mobile) -->
+          <div class="form-wizard-nav" id="form-wizard-nav">
+            <button type="button" class="wizard-step active" data-step="0" aria-label="Step 1: Basic Info">1</button>
+            <button type="button" class="wizard-step" data-step="1" aria-label="Step 2: Players &amp; Time">2</button>
+            <button type="button" class="wizard-step" data-step="2" aria-label="Step 3: Tags &amp; Labels">3</button>
+            <button type="button" class="wizard-step" data-step="3" aria-label="Step 4: Ownership">4</button>
+          </div>
 
           <fieldset class="form-section">
             <legend class="form-section-legend">Basic Info</legend>
@@ -363,7 +383,11 @@
           </fieldset>
 
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Add to Collection</button>
+            <div class="form-wizard-btns" id="form-wizard-btns">
+              <button type="button" class="btn btn-secondary wizard-prev" id="wizard-prev">Back</button>
+              <button type="button" class="btn btn-primary wizard-next" id="wizard-next">Next</button>
+            </div>
+            <button type="submit" class="btn btn-primary" id="form-submit-btn">Add to Collection</button>
           </div>
         </form>
       </div>
@@ -429,6 +453,11 @@
         <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
         <span>Theme</span>
+      </button>
+      <span class="footer-separator">·</span>
+      <button class="footer-link" id="pause-mode-btn" title="Pause streak tracking and heat for vacations/breaks">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+        <span>Pause</span>
       </button>
       <span class="footer-separator">·</span>
       <a href="https://github.com/NoIdeaDeveloper/cardboard" class="footer-link" target="_blank" rel="noopener noreferrer" title="GitHub Repository">

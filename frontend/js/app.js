@@ -51,8 +51,9 @@
   }
 
   // ===== Transient UI state (not persisted) =====
-  let hoveredGame  = null;  // game card the mouse is currently over
-  let activeModal  = null;  // { game, mode } when the game modal is open
+  let hoveredGame         = null;  // game card the mouse is currently over
+  let activeModal         = null;  // { game, mode } when the game modal is open
+  let _lastBulkClickedId  = null;  // game id last toggled in bulk mode, for shift+click range
 
   // ===== Milestones =====
   const MILESTONE_STORAGE_KEY    = 'cardboard_milestones';
@@ -152,7 +153,7 @@
 
     if (sortDirBtn) {
       sortDirBtn.dataset.dir = state.sortDir;
-      sortDirBtn.setAttribute('title', state.sortDir === 'asc' ? 'Sort ascending' : 'Sort descending');
+      sortDirBtn.setAttribute('data-tooltip', state.sortDir === 'asc' ? 'Sort ascending' : 'Sort descending');
       sortDirBtn.querySelector('svg').style.transform = state.sortDir === 'desc' ? 'scaleY(-1)' : '';
     }
 
@@ -259,6 +260,17 @@
 
     if (logoIcon) logoIcon.addEventListener('click', handleLogoClick);
     if (logoText) logoText.addEventListener('click', handleLogoClick);
+
+    // Prefetch stats on hover over Stats nav buttons
+    const statsNavBtn = document.getElementById('nav-btn-stats');
+    if (statsNavBtn) {
+      statsNavBtn.addEventListener('mouseenter', _prefetchStats, { once: false });
+    }
+    // Also prefetch from bottom nav
+    const bottomStatsBtn = document.querySelector('.bottom-nav-btn[data-view="stats"]');
+    if (bottomStatsBtn) {
+      bottomStatsBtn.addEventListener('mouseenter', _prefetchStats, { once: false });
+    }
   }
 
   function switchView(view) {
@@ -314,13 +326,115 @@
       loadCollection();
     });
 
+    // Collection search autocomplete
+    const acContainer = document.getElementById('search-autocomplete');
+    let _acDebounce;
+    if (acContainer) {
+      let _acSelectedIdx = -1;
+
+      function _hideAc() {
+        acContainer.style.display = 'none';
+        _acSelectedIdx = -1;
+      }
+
+      function _showAc(items) {
+        _acSelectedIdx = -1;
+        acContainer.innerHTML = items.map((g, i) => `
+          <button type="button" class="search-autocomplete-item" data-idx="${i}" data-game-id="${g.id}">
+            <span class="ac-game-name">${escapeHtml(g.name)}</span>
+            ${g.year_published ? `<span class="ac-game-year">${g.year_published}</span>` : ''}
+          </button>`).join('');
+        acContainer.style.display = '';
+        acContainer.querySelectorAll('.search-autocomplete-item').forEach(btn => {
+          btn.addEventListener('mousedown', e => {
+            e.preventDefault();
+            const gameId = parseInt(btn.dataset.gameId, 10);
+            const game = state.games.find(g => g.id === gameId);
+            if (game) {
+              searchInput.value = game.name;
+              state.search = game.name;
+              clearBtn.style.display = 'flex';
+              saveCollectionPrefs();
+              _hideAc();
+              debouncedSearchLoad();
+            }
+          });
+        });
+      }
+
+      function _acUpdateSelected() {
+        const items = acContainer.querySelectorAll('.search-autocomplete-item');
+        items.forEach((el, i) => el.classList.toggle('active', i === _acSelectedIdx));
+        if (_acSelectedIdx >= 0 && items[_acSelectedIdx]) {
+          items[_acSelectedIdx].scrollIntoView({ block: 'nearest' });
+        }
+      }
+
+      searchInput.addEventListener('input', () => {
+        clearTimeout(_acDebounce);
+        const q = searchInput.value.trim().toLowerCase();
+        if (q.length < 2) { _hideAc(); return; }
+        _acDebounce = setTimeout(() => {
+          const matches = state.games.filter(g => g.name.toLowerCase().includes(q)).slice(0, 10);
+          if (matches.length === 0) {
+            acContainer.innerHTML = '<div class="search-autocomplete-empty">No matching games in collection</div>';
+            acContainer.style.display = '';
+          } else {
+            _showAc(matches);
+          }
+        }, 150);
+      });
+
+      searchInput.addEventListener('keydown', e => {
+        if (acContainer.style.display === 'none') {
+          if (e.key === 'ArrowDown' && searchInput.value.trim().length >= 2) {
+            // Trigger autocomplete if not shown but input qualifies
+            const q = searchInput.value.trim().toLowerCase();
+            const matches = state.games.filter(g => g.name.toLowerCase().includes(q)).slice(0, 10);
+            if (matches.length > 0) { _showAc(matches); _acSelectedIdx = 0; _acUpdateSelected(); }
+          }
+          return;
+        }
+        const items = acContainer.querySelectorAll('.search-autocomplete-item');
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          _acSelectedIdx = Math.min(_acSelectedIdx + 1, items.length - 1);
+          _acUpdateSelected();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          _acSelectedIdx = Math.max(_acSelectedIdx - 1, 0);
+          _acUpdateSelected();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (_acSelectedIdx >= 0 && items[_acSelectedIdx]) {
+            items[_acSelectedIdx].click();
+          }
+        } else if (e.key === 'Escape') {
+          _hideAc();
+        }
+      });
+
+      searchInput.addEventListener('blur', () => {
+        setTimeout(_hideAc, 150);
+      });
+
+      searchInput.addEventListener('focus', () => {
+        const q = searchInput.value.trim().toLowerCase();
+        if (q.length >= 2) {
+          clearTimeout(_acDebounce);
+          const matches = state.games.filter(g => g.name.toLowerCase().includes(q)).slice(0, 10);
+          if (matches.length > 0) _showAc(matches);
+        }
+      });
+    }
+
     sortBy.addEventListener('change', () => {
       state.sortBy = sortBy.value;
       // "Hot" is meaningless ascending — auto-flip to desc
       if (sortBy.value === 'heat_level' && state.sortDir !== 'desc') {
         state.sortDir = 'desc';
         sortDirBtn.dataset.dir = 'desc';
-        sortDirBtn.setAttribute('title', 'Sort descending');
+        sortDirBtn.setAttribute('data-tooltip', 'Sort descending');
         sortDirBtn.querySelector('svg').style.transform = 'scaleY(-1)';
       }
       saveCollectionPrefs();
@@ -330,7 +444,7 @@
     sortDirBtn.addEventListener('click', () => {
       state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
       sortDirBtn.dataset.dir = state.sortDir;
-      sortDirBtn.setAttribute('title', state.sortDir === 'asc' ? 'Sort ascending' : 'Sort descending');
+      sortDirBtn.setAttribute('data-tooltip', state.sortDir === 'asc' ? 'Sort ascending' : 'Sort descending');
       sortDirBtn.querySelector('svg').style.transform = state.sortDir === 'desc' ? 'scaleY(-1)' : '';
       saveCollectionPrefs();
       loadCollection();
@@ -358,7 +472,7 @@
         state.showExpansions = !state.showExpansions;
         expansionsBtn.classList.toggle('active', state.showExpansions);
         expansionsBtn.setAttribute('aria-pressed', state.showExpansions);
-        expansionsBtn.title = state.showExpansions ? 'Hide expansions' : 'Show expansions';
+        expansionsBtn.setAttribute('data-tooltip', state.showExpansions ? 'Hide expansions' : 'Show expansions');
         loadCollection();
       });
     }
@@ -369,11 +483,12 @@
         state.bulkMode = !state.bulkMode;
         if (!state.bulkMode) {
           state.selectedGameIds.clear();
+          _lastBulkClickedId = null;
           renderBulkToolbar();
         }
         bulkToggle.classList.toggle('active', state.bulkMode);
         bulkToggle.setAttribute('aria-pressed', state.bulkMode);
-        bulkToggle.title = state.bulkMode ? 'Exit selection mode' : 'Select games for bulk actions';
+        bulkToggle.setAttribute('data-tooltip', state.bulkMode ? 'Exit selection mode' : 'Select games for bulk actions');
         renderCollection();
       });
     }
@@ -539,6 +654,7 @@
         <datalist id="bulk-label-list">${[...new Set(state.games.flatMap(g => { try { return JSON.parse(g.labels || '[]'); } catch (err) { console.warn(`Failed to parse labels for game ${g.id}:`, err); return []; } }))].map(l => `<option value="${escapeHtml(l)}">`).join('')}</datalist>
         <button class="btn btn-secondary btn-sm" id="bulk-label-btn">Apply Label</button>
       </div>
+      <button class="btn btn-secondary btn-sm" id="bulk-select-all-btn">Select All</button>
       <button class="btn btn-danger btn-sm" id="bulk-delete-btn">Delete</button>
       <button class="btn btn-secondary btn-sm" id="bulk-deselect-btn">Deselect All</button>
     `;
@@ -551,6 +667,17 @@
       const label = toolbar.querySelector('#bulk-label-input').value.trim();
       if (!label) return;
       await handleBulkAddLabel(label);
+    });
+    const selectAllBtn = toolbar.querySelector('#bulk-select-all-btn');
+    selectAllBtn.textContent = state.selectedGameIds.size === state.games.length ? 'Deselect All' : 'Select All';
+    selectAllBtn.addEventListener('click', () => {
+      if (state.selectedGameIds.size >= state.games.length) {
+        state.selectedGameIds.clear();
+      } else {
+        state.games.forEach(g => state.selectedGameIds.add(g.id));
+      }
+      renderCollection();
+      renderBulkToolbar();
     });
     toolbar.querySelector('#bulk-delete-btn').addEventListener('click', handleBulkDelete);
     toolbar.querySelector('#bulk-deselect-btn').addEventListener('click', () => {
@@ -603,9 +730,10 @@
 
   async function handleBulkDelete() {
     const n = state.selectedGameIds.size;
-    const confirmed = await showConfirm(`Delete ${pluralize(n, 'Selected Game')}`, `Delete ${pluralize(n, 'selected game')}? This cannot be undone.`);
+    const confirmed = await showConfirm(`Delete ${pluralize(n, 'Selected Game')}`, `Delete ${pluralize(n, 'selected game')}?`);
     if (!confirmed) return;
     const ids = [...state.selectedGameIds];
+    const deletedGameSnapshots = ids.map(id => state.games.find(g => g.id === id)).filter(Boolean);
     const results = await Promise.allSettled(ids.map(id => API.deleteGame(id)));
     const failedIds = new Set();
     let firstFailReason = '';
@@ -624,6 +752,26 @@
       ? `${successCount} deleted · ${failCount} failed — ${firstFailReason}`
       : `${pluralize(successCount, 'game')} deleted`;
     showToast(msg, failCount > 0 ? 'error' : 'success');
+
+    if (successCount > 0) {
+      const restoredSnapshots = deletedGameSnapshots.filter(g => !failedIds.has(g.id));
+      showUndoToast(`${pluralize(successCount, 'game')} removed.`, async () => {
+        let restored = 0;
+        for (const snap of restoredSnapshots) {
+          try {
+            const { id: _id, date_modified: _dm, image_cached: _ic, parent_game_name: _pgn, ...payload } = snap;
+            const created = await API.createGame(payload);
+            state.games.push(created);
+            restored++;
+          } catch (_) { /* skip individual failures */ }
+        }
+        state.games = sortGames(state.games, state.sortBy, state.sortDir);
+        renderCollection();
+        refreshCollectionStats();
+        if (restored > 0) showToast(`${pluralize(restored, 'game')} restored.`, 'success');
+      }, restoredSnapshots.length > 3 ? 7000 : 5000);
+    }
+
     renderCollection();
     renderBulkToolbar();
     refreshStatsBackground();
@@ -641,6 +789,28 @@
 
       if (state.bulkMode) {
         if (e.target.closest('.quick-owned-btn, .quick-log-btn')) return;
+        if (e.shiftKey && _lastBulkClickedId != null) {
+          const lastIdx = state.games.findIndex(g => g.id === _lastBulkClickedId);
+          const currIdx = state.games.findIndex(g => g.id === game.id);
+          if (lastIdx !== -1 && currIdx !== -1) {
+            const from = Math.min(lastIdx, currIdx);
+            const to = Math.max(lastIdx, currIdx);
+            const selected = state.selectedGameIds.has(game.id);
+            for (let i = from; i <= to; i++) {
+              const g = state.games[i];
+              if (selected) {
+                state.selectedGameIds.delete(g.id);
+              } else {
+                state.selectedGameIds.add(g.id);
+              }
+            }
+            // Update last-clicked
+            _lastBulkClickedId = game.id;
+            renderCollection();
+            renderBulkToolbar();
+            return;
+          }
+        }
         if (state.selectedGameIds.has(game.id)) {
           state.selectedGameIds.delete(game.id);
           card.classList.remove('selected');
@@ -648,6 +818,7 @@
           state.selectedGameIds.add(game.id);
           card.classList.add('selected');
         }
+        _lastBulkClickedId = game.id;
         renderBulkToolbar();
         return;
       }
@@ -661,7 +832,10 @@
       }
 
       const logBtn = e.target.closest('.quick-log-btn');
-      if (logBtn) { e.stopPropagation(); openQuickLogSession(game); return; }
+      if (logBtn) { e.stopPropagation(); openCompactQuickLog(game, logBtn); return; }
+
+      const repeatBtn = e.target.closest('.quick-repeat-btn');
+      if (repeatBtn) { e.stopPropagation(); withLoading(repeatBtn, () => quickRepeatLastSession(game)); return; }
 
       if (e.target.closest('.card-hover-view')) { openGameModal(game); return; }
 
@@ -699,6 +873,17 @@
       state.filterCategories.length > 0 || state.filterLocation !== null;
   }
 
+  function _activeFilterCount() {
+    let count = 0;
+    if (state.filterNeverPlayed) count++;
+    if (state.filterPlayers !== null) count++;
+    if (state.filterTime !== null) count++;
+    count += state.filterMechanics.length;
+    count += state.filterCategories.length;
+    if (state.filterLocation !== null) count++;
+    return count;
+  }
+
   function _locationLabel(key) {
     return key === NO_LOCATION_SENTINEL ? 'No location' : key;
   }
@@ -706,10 +891,41 @@
   function syncFilterActiveBar() {
     const bar = document.getElementById('filter-active-bar');
     const label = document.getElementById('filter-active-label');
+    const toggleBtn = document.getElementById('filter-toggle-btn');
+    const badge = document.getElementById('filter-badge');
+    const summaryEl = document.getElementById('filter-summary');
     if (!bar || !label) return;
     const panel = document.getElementById('filter-panel');
     const panelOpen = panel && panel.classList.contains('open');
-    if (!hasActiveFilters() || panelOpen) {
+    const activeCount = _activeFilterCount();
+    const hasFilters = hasActiveFilters();
+
+    // Update filter toggle button state
+    if (toggleBtn) {
+      toggleBtn.classList.toggle('active', hasFilters || panelOpen);
+      toggleBtn.setAttribute('aria-pressed', panelOpen ? 'true' : 'false');
+      toggleBtn.setAttribute('data-tooltip', panelOpen ? 'Hide filters' : 'Show filters');
+    }
+    if (badge) {
+      if (activeCount > 0 && !panelOpen) {
+        badge.textContent = activeCount > 99 ? '99+' : activeCount;
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    // Update filter summary bar
+    if (summaryEl && state.collectionStats) {
+      const cs = state.collectionStats;
+      const parts = [];
+      if (cs.total_owned) parts.push(`<span class="filter-summary-stat"><span class="ss-count">${cs.total_owned}</span> owned</span>`);
+      if (cs.total_wishlist) parts.push(`<span class="filter-summary-stat"><span class="ss-count">${cs.total_wishlist}</span> wishlist</span>`);
+      if (cs.total_sold) parts.push(`<span class="filter-summary-stat"><span class="ss-count">${cs.total_sold}</span> sold</span>`);
+      summaryEl.innerHTML = parts.join('<span class="filter-summary-sep"> · </span>');
+    }
+
+    if (!hasFilters || panelOpen) {
       bar.style.display = 'none';
       return;
     }
@@ -1044,6 +1260,10 @@
   }
 
   // ===== Game Modal =====
+  function _findGameNavIndex(gameId) {
+    return state.games.findIndex(g => g.id === gameId);
+  }
+
   async function openGameModal(game, mode = 'view', onBack = null) {
     const [sessResult, imgResult] = await Promise.allSettled([
       API.getSessions(game.id),
@@ -1070,6 +1290,18 @@
       return `${window.location.origin}/share.html?token=${permanent.token}&game=${game.id}`;
     };
 
+    const navIdx = mode === 'view' ? _findGameNavIndex(game.id) : -1;
+    const prevGame = navIdx > 0 ? state.games[navIdx - 1] : null;
+    const nextGame = navIdx >= 0 && navIdx < state.games.length - 1 ? state.games[navIdx + 1] : null;
+    const navInfo = mode === 'view' ? {
+      prevGame,
+      nextGame,
+      prevLabel: prevGame ? prevGame.name : '',
+      nextLabel: nextGame ? nextGame.name : '',
+      onPrev: prevGame ? () => openGameModal(prevGame, 'view') : null,
+      onNext: nextGame ? () => openGameModal(nextGame, 'view') : null,
+    } : null;
+
     const contentEl = buildModalContent(
       game, sessions,
       handleSaveGame, handleDeleteGame,
@@ -1085,6 +1317,7 @@
       (targetGame) => openGameModal(targetGame, 'view', () => openGameModal(game, 'view', onBack)),
       onShareGame,
       () => { activeModal = null; closeModal(); },
+      navInfo,
     );
 
     if (onBack) {
@@ -1103,6 +1336,135 @@
 
   function openQuickLogSession(game) {
     const today = new Date().toISOString().split('T')[0];
+    openCompactQuickLog(game, null, today);
+  }
+
+  function openCompactQuickLog(game, anchorEl, today) {
+    // If there's already a compact popover, remove it
+    const existing = document.querySelector('.ql-compact-popover');
+    if (existing) { existing.remove(); return; }
+
+    const todayStr = today || new Date().toISOString().split('T')[0];
+    const popover = document.createElement('div');
+    popover.className = 'ql-compact-popover';
+    popover.innerHTML = `
+      <div class="ql-compact-header">
+        <span class="ql-compact-game">${escapeHtml(game.name)}</span>
+      </div>
+      <div class="ql-compact-fields">
+        <div class="ql-compact-row">
+          <label class="ql-compact-label">Date</label>
+          <input type="date" class="ql-compact-input" id="qlc-date" value="${todayStr}" autocomplete="off">
+        </div>
+        <div class="ql-compact-row">
+          <label class="ql-compact-label">Rating</label>
+          <div class="star-picker ql-compact-stars" id="qlc-rating" data-value="0">
+            ${[1,2,3,4,5].map(n => `<button type="button" class="star-btn star-btn-sm" data-val="${n}" title="${n} star${n>1?'s':''}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><polygon points="8 1.5 10 5.5 14.5 6.1 11.2 9.2 12 13.7 8 11.6 4 13.7 4.8 9.2 1.5 6.1 6 5.5"/></svg></button>`).join('')}
+          </div>
+        </div>
+        <div class="ql-compact-row">
+          <label class="ql-compact-label">Duration</label>
+          <input type="number" class="ql-compact-input" id="qlc-duration" min="1" placeholder="min" autocomplete="off">
+        </div>
+      </div>
+      <div class="ql-compact-actions">
+        <button class="btn btn-primary btn-sm" id="qlc-submit">Log it</button>
+        <button class="btn btn-ghost btn-sm" id="qlc-more">More</button>
+      </div>
+      <button class="ql-compact-close" id="qlc-close" aria-label="Close">&times;</button>
+    `;
+
+    document.body.appendChild(popover);
+
+    function close() {
+      document.removeEventListener('keydown', onKeyDown);
+      popover.classList.remove('open');
+      setTimeout(() => popover.remove(), 180);
+    }
+
+    function onKeyDown(e) {
+      if (e.key === 'Escape') close();
+    }
+
+    // Position logic: if anchorEl provided, position near it; otherwise centered
+    if (anchorEl) {
+      const anchorRect = anchorEl.getBoundingClientRect();
+      const popoverW = 260;
+      const gap = 8;
+      let left = anchorRect.left + anchorRect.width / 2 - popoverW / 2;
+      let top = anchorRect.top - gap;
+      if (left < 8) left = 8;
+      if (left + popoverW > window.innerWidth - 8) left = window.innerWidth - popoverW - 8;
+      if (top < 60) {
+        top = anchorRect.bottom + gap;
+      }
+      popover.style.left = left + 'px';
+      popover.style.top = top + 'px';
+    } else {
+      popover.classList.add('ql-compact-centered');
+    }
+    requestAnimationFrame(() => popover.classList.add('open'));
+
+    document.addEventListener('keydown', onKeyDown);
+    popover.querySelector('#qlc-close').addEventListener('click', close);
+
+    // Star picker
+    const ratingPicker = popover.querySelector('#qlc-rating');
+    ratingPicker.addEventListener('click', e => {
+      const btn = e.target.closest('.star-btn');
+      if (!btn) return;
+      const val = parseInt(btn.dataset.val, 10);
+      ratingPicker.dataset.value = val;
+      ratingPicker.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val, 10) <= val));
+    });
+    ratingPicker.addEventListener('mouseover', e => {
+      const btn = e.target.closest('.star-btn');
+      if (!btn) return;
+      const val = parseInt(btn.dataset.val, 10);
+      ratingPicker.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val, 10) <= val));
+    });
+    ratingPicker.addEventListener('mouseleave', () => {
+      const saved = parseInt(ratingPicker.dataset.value, 10) || 0;
+      ratingPicker.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val, 10) <= saved));
+    });
+
+    // Submit
+    popover.querySelector('#qlc-submit').addEventListener('click', async () => {
+      const dateVal = popover.querySelector('#qlc-date').value;
+      if (!dateVal) { showToast('Please enter a date.', 'error'); return; }
+      const rating = parseInt(ratingPicker.dataset.value, 10) || null;
+      const duration = parseInt(popover.querySelector('#qlc-duration').value, 10) || null;
+      await withLoading(popover.querySelector('#qlc-submit'), () => handleAddSession(game.id, {
+        played_at: dateVal,
+        session_rating: rating,
+        duration_minutes: duration,
+      }, () => {
+        renderCollection();
+        refreshStatsBackground();
+        refreshCollectionStats();
+      }), 'Logging…');
+      close();
+    });
+
+    // More options — open full form
+    popover.querySelector('#qlc-more').addEventListener('click', () => {
+      close();
+      // Preserve date if set
+      const compactDate = popover.querySelector('#qlc-date').value;
+      openQuickLogSessionFull(game, compactDate);
+    });
+
+    // Close on outside click
+    document.addEventListener('mousedown', function _outside(e) {
+      if (!popover.contains(e.target) && e.target !== anchorEl && !(anchorEl && anchorEl.contains(e.target))) {
+        close();
+        document.removeEventListener('mousedown', _outside);
+      }
+    });
+  }
+
+  function openQuickLogSessionFull(game, presetDate) {
+    const today = presetDate || new Date().toISOString().split('T')[0];
     const overlay = document.createElement('div');
     overlay.className = 'quick-log-overlay';
     overlay.innerHTML = `
@@ -1300,6 +1662,16 @@
   }
 
   async function handleQuickStatusChange(gameId, newStatus) {
+    const game = state.games.find(g => g.id === gameId);
+    const oldStatus = game ? game.status : null;
+    const gameName = game ? game.name : 'Game';
+    // Optimistic update: apply immediately, roll back on failure
+    if (game && oldStatus !== newStatus) {
+      updateGameInState(gameId, { status: newStatus });
+      renderCollection();
+      refreshStatsBackground();
+      refreshCollectionStats();
+    }
     try {
       const updated = await API.updateGame(gameId, { status: newStatus });
       updateGameInState(gameId, updated);
@@ -1307,7 +1679,27 @@
       refreshStatsBackground();
       refreshCollectionStats();
       showToast('Added to collection!', 'success');
+      if (oldStatus && oldStatus !== newStatus) {
+        showUndoToast(`"${gameName}" moved to collection.`, async () => {
+          try {
+            const reverted = await API.updateGame(gameId, { status: oldStatus });
+            updateGameInState(gameId, reverted);
+            renderCollection();
+            refreshStatsBackground();
+            refreshCollectionStats();
+            showToast(`"${gameName}" moved back to ${oldStatus}.`, 'success');
+          } catch (err) {
+            showToast(`Could not undo: ${classifyError(err)}`, 'error');
+          }
+        });
+      }
     } catch (err) {
+      if (oldStatus) {
+        updateGameInState(gameId, { status: oldStatus });
+        renderCollection();
+        refreshStatsBackground();
+        refreshCollectionStats();
+      }
       showToast(`Update failed: ${classifyError(err)}`, 'error');
     }
   }
@@ -1406,19 +1798,30 @@
   }
 
   async function handleAddSession(gameId, sessionData, onSuccess) {
+    // Optimistic update: bump session count and last_played immediately
+    const game = state.games.find(g => g.id === gameId);
+    const prevCount = game ? (game.session_count ?? 0) : 0;
+    const prevLastPlayed = game ? game.last_played : null;
+    const playedAt = sessionData.played_at || new Date().toISOString().split('T')[0];
+    if (game) {
+      updateGameInState(gameId, {
+        session_count: prevCount + 1,
+        last_played: !game.last_played || playedAt > game.last_played ? playedAt : game.last_played,
+      });
+      renderCollection();
+    }
     try {
       const created = await API.addSession(gameId, sessionData);
       showToast('Session logged!', 'success');
       // +1 float animation on the game card
       const cardEl = document.querySelector(`.game-card[data-game-id="${gameId}"]`);
       if (cardEl) floatPlusOne(cardEl);
-      // Update last_played in local state
-      if (created.played_at) {
-        const game = state.games.find(g => g.id === gameId);
-        if (game && (!game.last_played || created.played_at > game.last_played)) {
-          updateGameInState(gameId, { last_played: created.played_at });
-        }
-      }
+      // Update from server (which has authoritative count)
+      updateGameInState(gameId, {
+        last_played: created.played_at || playedAt,
+        session_count: created.game_session_count,
+      });
+      renderCollection();
       if (onSuccess) onSuccess(created);
       // Milestone check fires after callback so UI updates first
       const gameName = state.games.find(g => g.id === gameId)?.name || 'this game';
@@ -1428,6 +1831,14 @@
       });
       refreshCollectionStats();
     } catch (err) {
+      // Roll back optimistic update
+      if (game) {
+        updateGameInState(gameId, {
+          session_count: prevCount,
+          last_played: prevLastPlayed,
+        });
+        renderCollection();
+      }
       showToast(`Failed to log session: ${classifyError(err)}`, 'error');
     }
   }
@@ -1447,18 +1858,82 @@
     }
   }
 
-  async function handleDeleteSession(sessionId, gameId, onSuccess) {
-    const confirmed = await showConfirm('Delete Session', 'Remove this session? This cannot be undone.');
+  async function quickRepeatLastSession(game) {
+    try {
+      const sessions = await API.getSessions(game.id);
+      if (!sessions || !sessions.length) {
+        showToast('No previous sessions to repeat.', 'error');
+        return;
+      }
+      const last = sessions.reduce((a, b) => a.played_at > b.played_at ? a : b);
+      const today = new Date().toISOString().split('T')[0];
+      const payload = {
+        played_at: today,
+        player_count: last.player_count,
+        duration_minutes: last.duration_minutes,
+        player_names: last.players || [],
+        notes: '',
+        winner: last.winner || '',
+        session_rating: last.session_rating || 0,
+        solo: !!last.solo,
+      };
+      if (last.player_scores && Object.keys(last.player_scores).length) {
+        payload.player_scores = last.player_scores;
+      }
+      await handleAddSession(game.id, payload, () => {
+        renderCollection();
+        refreshStatsBackground();
+        refreshCollectionStats();
+      });
+      const playerList = payload.player_names.length
+        ? ` with ${payload.player_names.join(', ')}`
+        : ` (${payload.player_count || '?'}p, ${payload.duration_minutes || '?'}min)`;
+      const prevLabel = last.played_at ? formatDate(last.played_at) : 'previous';
+      showToast(`Last session repeated from ${prevLabel}${playerList}`, 'success');
+    } catch (err) {
+      showToast(`Failed to repeat session: ${classifyError(err)}`, 'error');
+    }
+  }
+
+  async function handleDeleteSession(sessionId, gameId, onSuccess, sessionData = null) {
+    const confirmed = await showConfirm('Delete Session', 'Remove this session?');
     if (!confirmed) return;
     try {
+      const capturedSession = sessionData || null;
       await API.deleteSession(sessionId);
-      // Refresh last_played in local state — the backend recalculates it on delete
       try {
         const updated = await API.getGame(gameId);
         updateGameInState(gameId, { last_played: updated.last_played });
       } catch (_) { /* non-fatal */ }
       if (onSuccess) onSuccess(sessionId);
       refreshCollectionStats();
+
+      if (capturedSession) {
+        const dateLabel = capturedSession.played_at ? formatDate(capturedSession.played_at) : 'session';
+        showUndoToast(`Session on ${dateLabel} removed.`, async () => {
+          try {
+            const payload = {
+              played_at: capturedSession.played_at,
+              player_count: capturedSession.player_count,
+              duration_minutes: capturedSession.duration_minutes,
+              player_names: capturedSession.players || [],
+              notes: capturedSession.notes || '',
+              winner: capturedSession.winner || '',
+              session_rating: capturedSession.session_rating || 0,
+              solo: !!capturedSession.solo,
+            };
+            if (capturedSession.player_scores) {
+              payload.player_scores = capturedSession.player_scores;
+            }
+            await API.addSession(gameId, payload);
+            showToast('Session restored.', 'success');
+            if (onSuccess) onSuccess(null);
+            refreshCollectionStats();
+          } catch (err) {
+            showToast(`Could not restore session: ${classifyError(err)}`, 'error');
+          }
+        });
+      }
     } catch (err) {
       showToast(`Failed to delete session: ${classifyError(err)}`, 'error');
     }
@@ -1587,11 +2062,21 @@
       if (e.key === 'Escape' && state.bulkMode) {
         state.bulkMode = false;
         state.selectedGameIds.clear();
+        _lastBulkClickedId = null;
         const bulkToggle = document.getElementById('bulk-select-toggle');
-        if (bulkToggle) { bulkToggle.classList.remove('active'); bulkToggle.setAttribute('aria-pressed', false); bulkToggle.title = 'Select games for bulk actions'; }
+        if (bulkToggle) { bulkToggle.classList.remove('active'); bulkToggle.setAttribute('aria-pressed', false); bulkToggle.setAttribute('data-tooltip', 'Select games for bulk actions'); }
         renderCollection();
         renderBulkToolbar();
         return;
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        if (!activeModal || activeModal.mode !== 'view') return;
+        e.preventDefault();
+        const navIdx = _findGameNavIndex(activeModal.game.id);
+        if (e.key === 'ArrowLeft' && navIdx > 0) {
+          openGameModal(state.games[navIdx - 1], 'view');
+        } else if (e.key === 'ArrowRight' && navIdx >= 0 && navIdx < state.games.length - 1) {
+          openGameModal(state.games[navIdx + 1], 'view');
+        }
       } else if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
         document.querySelector('[data-view="add"]')?.click();
@@ -1609,6 +2094,10 @@
           e.preventDefault();
           openGameModal(hoveredGame, 'edit');
         }
+      } else if (e.key === '/') {
+        e.preventDefault();
+        const searchEl = document.getElementById('collection-search');
+        if (searchEl) searchEl.focus();
       }
     });
   }
@@ -1757,9 +2246,17 @@
             </div>
           </div>` : ''}
           <div class="players-list" id="players-list"></div>
+          <div class="modal-close-bar">
+            <button class="btn btn-ghost btn-sm modal-close-sticky-btn" id="players-modal-close-sticky" aria-label="Close">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              Close
+            </button>
+          </div>
         </div>`;
 
       inner.querySelector('#players-modal-close').addEventListener('click', (e) => { e.stopPropagation(); close(); });
+      const playersStickyClose = inner.querySelector('#players-modal-close-sticky');
+      if (playersStickyClose) playersStickyClose.addEventListener('click', (e) => { e.stopPropagation(); close(); });
 
       const addInput = inner.querySelector('#new-player-name');
       const addBtn   = inner.querySelector('#add-player-btn');
@@ -1907,6 +2404,7 @@
 
           const confirmYesBtn = confirmRow.querySelector('.confirm-yes');
           confirmRow.querySelector('.confirm-yes').addEventListener('click', async () => {
+            const capturedPlayerObj = allPlayers.find(p => p.id === playerId);
             try {
               await withLoading(confirmYesBtn, async () => {
                 await API.deletePlayer(playerId);
@@ -1918,6 +2416,20 @@
                   listEl.innerHTML = playersEmptyHtml;
                 }
               }, 'Deleting…');
+              if (capturedPlayerObj) {
+                showUndoToast(`Player "${playerName}" removed.`, async () => {
+                  try {
+                    const created = await API.createPlayer(playerName);
+                    state.players.push(created.name);
+                    state.playerObjects = state.playerObjects || [];
+                    state.playerObjects.push(created);
+                    showToast(`"${playerName}" restored.`, 'success');
+                    openPlayersModal();
+                  } catch (e) {
+                    showToast(`Could not restore player: ${classifyError(e)}`, 'error');
+                  }
+                });
+              }
             } catch (err) {
               showToast(`Failed to delete player: ${classifyError(err)}`, 'error');
               confirmRow.remove();
@@ -2274,6 +2786,7 @@
           if (!items.length) { results.innerHTML = `<div class="secondary-empty" style="padding:16px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><span class="secondary-empty-text">No results on BoardGameGeek</span></div>`; return; }
           results.innerHTML = items.map(item => `
             <button type="button" class="bgg-search-result" data-bgg-id="${item.bgg_id}">
+              ${item.thumbnail ? `<span class="bgg-result-thumb"><img src="${escapeHtml(item.thumbnail)}" alt="" loading="lazy" width="40" height="40"></span>` : '<span class="bgg-result-thumb bgg-result-thumb-empty"></span>'}
               <span class="bgg-result-name">${escapeHtml(item.name)}</span>
               ${item.year_published ? `<span class="bgg-result-year">${item.year_published}</span>` : ''}
             </button>`).join('');
@@ -2550,6 +3063,69 @@
         }
       }
     });
+    _initFormWizard();
+  }
+
+  function _initFormWizard() {
+    const form = document.getElementById('manual-form');
+    const fieldsets = form.querySelectorAll('fieldset.form-section');
+    const steps = document.querySelectorAll('#form-wizard-nav .wizard-step');
+    const prevBtn = document.getElementById('wizard-prev');
+    const nextBtn = document.getElementById('wizard-next');
+    const submitBtn = document.getElementById('form-submit-btn');
+    if (!fieldsets.length || !steps.length) return;
+
+    let currentStep = 0;
+
+    function showStep(idx, skipScroll) {
+      fieldsets.forEach((fs, i) => {
+        fs.classList.toggle('active', i === idx);
+      });
+      steps.forEach((st, i) => {
+        st.classList.toggle('active', i === idx);
+        st.classList.toggle('completed', i < idx);
+      });
+      prevBtn.style.visibility = idx === 0 ? 'hidden' : 'visible';
+      const wizardActive = getComputedStyle(document.getElementById('form-wizard-nav')).display !== 'none';
+      if (wizardActive) {
+        if (idx === fieldsets.length - 1) {
+          nextBtn.style.display = 'none';
+          submitBtn.style.display = 'inline-flex';
+        } else {
+          nextBtn.style.display = 'inline-flex';
+          submitBtn.style.display = 'none';
+        }
+      } else {
+        nextBtn.style.display = '';
+        submitBtn.style.display = '';
+      }
+      if (!skipScroll) fieldsets[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    nextBtn.addEventListener('click', () => {
+      if (currentStep < fieldsets.length - 1) {
+        currentStep++;
+        showStep(currentStep);
+      }
+    });
+
+    prevBtn.addEventListener('click', () => {
+      if (currentStep > 0) {
+        currentStep--;
+        showStep(currentStep);
+      }
+    });
+
+    steps.forEach(step => {
+      step.addEventListener('click', () => {
+        const target = parseInt(step.dataset.step, 10);
+        currentStep = target;
+        showStep(currentStep);
+      });
+    });
+
+    // Initialize
+    showStep(0, true);
   }
 
   // ===== Status Pills =====
@@ -2647,14 +3223,25 @@
     const playersEl  = document.getElementById('filter-players');
     const timeEl     = document.getElementById('filter-time');
     const clearBtn   = document.getElementById('filter-clear-all');
+    const toggleBtn  = document.getElementById('filter-toggle-btn');
 
-    function openPanel()  { renderFilterChips(); panel.classList.add('open'); }
-    function closePanel() { if (!hasActiveFilters()) panel.classList.remove('open'); }
+    function openPanel()  { renderFilterChips(); panel.classList.add('open'); syncFilterActiveBar(); }
+    function closePanel() { if (!hasActiveFilters()) panel.classList.remove('open'); syncFilterActiveBar(); }
 
     searchEl.addEventListener('click', openPanel);
 
+    toggleBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+      } else {
+        openPanel();
+      }
+      syncFilterActiveBar();
+    });
+
     document.addEventListener('mousedown', e => {
-      if (!panel.contains(e.target) && !searchWrap.contains(e.target)) closePanel();
+      if (!panel.contains(e.target) && !searchWrap.contains(e.target) && e.target !== toggleBtn && !toggleBtn.contains(e.target)) closePanel();
     });
 
     neverBtn.addEventListener('click', () => {
@@ -2797,66 +3384,105 @@
       const maxMinutes  = parseInt(inner.querySelector('#gn-time').value, 10) || null;
       const resultsEl   = inner.querySelector('#gn-results');
       const btn         = inner.querySelector('#gn-suggest-btn');
-      // Show thinking animation immediately
-      resultsEl.innerHTML = `<div class="gn-thinking"><div class="gn-dice">🎲</div><p>Finding your game…</p></div>`;
-      try {
-        await withLoading(btn, async () => {
+      const dismissedIds = new Set();
+      let allSuggestions = [];
+
+      function renderResults(suggestions) {
+        const visible = suggestions.filter(s => !dismissedIds.has(s.id));
+        if (!visible.length) {
+          resultsEl.innerHTML = `
+            <p class="game-night-empty">All games dismissed.</p>
+            <button class="btn btn-ghost btn-sm gn-reset-btn">Reset &amp; re-roll</button>
+          `;
+          resultsEl.querySelector('.gn-reset-btn')?.addEventListener('click', () => {
+            dismissedIds.clear();
+            renderResults(allSuggestions);
+          });
+          return;
+        }
+        const activeChips = [];
+        if (playerCount) activeChips.push(`👥 ${playerCount} players`);
+        if (maxMinutes) activeChips.push(`⏱ ≤ ${maxMinutes} min`);
+        const filterChipsHtml = activeChips.length
+          ? `<div class="gn-active-filters">${activeChips.map(c => `<span class="reason-chip">${escapeHtml(c)}</span>`).join('')}</div>`
+          : '';
+
+        resultsEl.innerHTML = filterChipsHtml + visible.map((s, i) => `
+          <div class="game-night-item${i === 0 ? ' gn-top-pick' : ''}" data-game-id="${s.id}" role="button" tabindex="0" aria-label="${escapeHtml(s.name)}">
+            <div class="game-night-thumb">
+              ${s.image_url ? `<img src="${escapeHtml(s.image_url)}" alt="" loading="lazy">` : placeholderSvg()}
+            </div>
+            <div class="game-night-info">
+              <div class="game-night-name">${escapeHtml(s.name)}</div>
+              <div class="game-night-meta">
+                ${s.min_players || s.max_players ? `<span>${formatPlayers(s.min_players, s.max_players)}</span>` : ''}
+                ${s.min_playtime || s.max_playtime ? `<span>${formatPlaytime(s.min_playtime, s.max_playtime)}</span>` : ''}
+                ${s.difficulty ? `<span>Difficulty ${+s.difficulty.toFixed(2)}</span>` : ''}
+                ${s.user_rating ? `<span>★ ${s.user_rating.toFixed(1)}</span>` : ''}
+              </div>
+              <div class="game-night-reasons">${s.reasons.map(r => `<span class="reason-chip">${escapeHtml(r)}</span>`).join('')}</div>
+            </div>
+            <button class="gn-dismiss-btn" data-game-id="${s.id}" aria-label="Not interested in ${escapeHtml(s.name)}" title="Not interested">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
+            </button>
+          </div>`).join('');
+
+        if (visible.length < allSuggestions.length) {
+          resultsEl.insertAdjacentHTML('beforeend', '<button class="btn btn-ghost btn-sm gn-reroll-btn" style="margin-top:12px">🔄 Re-roll with new games</button>');
+          resultsEl.querySelector('.gn-reroll-btn')?.addEventListener('click', () => {
+            resultsEl.innerHTML = `<div class="gn-thinking"><div class="gn-dice">🎲</div><p>Finding more games…</p></div>`;
+            fetchAndRender();
+          });
+        }
+
+        resultsEl.querySelectorAll('.gn-dismiss-btn').forEach(b => {
+          b.addEventListener('click', e => {
+            e.stopPropagation();
+            const id = +b.dataset.gameId;
+            dismissedIds.add(id);
+            const item = b.closest('.game-night-item');
+            if (item) {
+              item.style.maxHeight = item.offsetHeight + 'px';
+              requestAnimationFrame(() => item.classList.add('gn-dismissed'));
+              setTimeout(() => renderResults(allSuggestions), 250);
+            }
+          });
+        });
+
+        resultsEl.querySelectorAll('.game-night-item').forEach(el => {
+          el.addEventListener('click', e => {
+            if (e.target.closest('.gn-dismiss-btn')) return;
+            const game = state.games.find(g => g.id === +el.dataset.gameId);
+            if (game) { close(); openGameModal(game); }
+          });
+        });
+      }
+
+      async function fetchAndRender() {
+        try {
           const [suggestions] = await Promise.all([
             API.suggestGames(playerCount, maxMinutes),
             new Promise(r => setTimeout(r, 800))
           ]);
-          if (!suggestions.length) {
+          allSuggestions = suggestions;
+          if (!allSuggestions.length) {
             resultsEl.innerHTML = '<p class="game-night-empty">No matching games found. Try adjusting the filters.</p>';
             return;
           }
-          // Active filter chips
-          const activeChips = [];
-          if (playerCount) activeChips.push(`👥 ${playerCount} players`);
-          if (maxMinutes) activeChips.push(`⏱ ≤ ${maxMinutes} min`);
-          const filterChipsHtml = activeChips.length
-            ? `<div class="gn-active-filters">${activeChips.map(c => `<span class="reason-chip">${escapeHtml(c)}</span>`).join('')}</div>`
-            : '';
+          dismissedIds.clear();
+          renderResults(allSuggestions);
+        } catch (err) { showToast(classifyError(err), 'error'); }
+      }
 
-          resultsEl.innerHTML = filterChipsHtml + suggestions.map((s, i) => `
-            <div class="game-night-item${i === 0 ? ' gn-top-pick' : ''}" data-game-id="${s.id}" role="button" tabindex="0" aria-label="${escapeHtml(s.name)}">
-              <div class="game-night-thumb">
-                ${s.image_url ? `<img src="${escapeHtml(s.image_url)}" alt="" loading="lazy">` : placeholderSvg()}
-              </div>
-              <div class="game-night-info">
-                <div class="game-night-name">${escapeHtml(s.name)}</div>
-                <div class="game-night-meta">
-                  ${s.min_players || s.max_players ? `<span>${formatPlayers(s.min_players, s.max_players)}</span>` : ''}
-                  ${s.min_playtime || s.max_playtime ? `<span>${formatPlaytime(s.min_playtime, s.max_playtime)}</span>` : ''}
-                  ${s.difficulty ? `<span>Difficulty ${+s.difficulty.toFixed(2)}</span>` : ''}
-                  ${s.user_rating ? `<span>★ ${s.user_rating.toFixed(1)}</span>` : ''}
-                </div>
-                <div class="game-night-reasons">${s.reasons.map(r => `<span class="reason-chip">${escapeHtml(r)}</span>`).join('')}</div>
-              </div>
-              ${i === 0 ? `<button class="btn btn-primary btn-sm gn-log-play-btn" data-game-id="${s.id}" title="Log a play session">+ Log Play</button>` : ''}
-            </div>`).join('');
-
-          resultsEl.querySelectorAll('.game-night-item').forEach(el => {
-            el.addEventListener('click', e => {
-              if (e.target.closest('.gn-log-play-btn')) return;
-              const game = state.games.find(g => g.id === +el.dataset.gameId);
-              if (game) { close(); openGameModal(game); }
-            });
-          });
-
-          resultsEl.querySelectorAll('.gn-log-play-btn').forEach(btn => {
-            btn.addEventListener('click', e => {
-              e.stopPropagation();
-              const game = state.games.find(g => g.id === +btn.dataset.gameId);
-              if (game) { close(); openGameModal(game); }
-            });
-          });
-        }, 'Finding games…');
-      } catch (err) { showToast(classifyError(err), 'error'); }
+      // Show thinking animation immediately
+      resultsEl.innerHTML = `<div class="gn-thinking"><div class="gn-dice">🎲</div><p>Finding your game…</p></div>`;
+      await withLoading(btn, fetchAndRender, 'Finding games…');
     });
   }
 
   // ===== Stats =====
   let _statsLoading = false;
+  let _statsPrefetched = null; // { stats, goals, prefs } cache for hover prefetch
   let _pendingBggHighlight = false; // set when user clicks "Import from BGG" on the empty state
   const STATS_PREFS_KEY = 'cardboard_stats_prefs';
   const STATS_PREFS_DEFAULTS = {
@@ -2979,6 +3605,75 @@
 
   let _statsEscController = null;
 
+  function _bindStatsSectionDragDrop(statsView) {
+    const sectionsGrid = statsView.querySelector('#stats-sections');
+    if (!sectionsGrid) return;
+
+    const gripSvg = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+      <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+      <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+      <circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/>
+    </svg>`;
+
+    let dragSrcKey = null;
+
+    sectionsGrid.querySelectorAll('.stats-section').forEach(section => {
+      const key = section.dataset.section;
+      if (!key) return;
+      section.setAttribute('draggable', 'true');
+
+      // Add drag handle
+      const handle = document.createElement('span');
+      handle.className = 'stats-drag-handle';
+      handle.innerHTML = gripSvg;
+      handle.setAttribute('aria-label', 'Drag to reorder');
+      section.insertBefore(handle, section.firstChild);
+      section.setAttribute('data-has-handle', '');
+
+      section.addEventListener('dragstart', e => {
+        dragSrcKey = key;
+        section.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+
+      section.addEventListener('dragend', () => {
+        section.classList.remove('dragging');
+        sectionsGrid.querySelectorAll('.drag-over').forEach(s => s.classList.remove('drag-over'));
+        dragSrcKey = null;
+      });
+
+      section.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (key !== dragSrcKey) {
+          section.classList.add('drag-over');
+        }
+      });
+
+      section.addEventListener('dragleave', () => {
+        section.classList.remove('drag-over');
+      });
+
+      section.addEventListener('drop', e => {
+        e.preventDefault();
+        section.classList.remove('drag-over');
+        if (!dragSrcKey || dragSrcKey === key) return;
+
+        const srcSection = sectionsGrid.querySelector(`[data-section="${dragSrcKey}"]`);
+        if (!srcSection) return;
+
+        const sections = [...sectionsGrid.querySelectorAll('[data-section]')];
+        const srcIdx = sections.indexOf(srcSection);
+        const dstIdx = sections.indexOf(section);
+        sectionsGrid.insertBefore(srcSection, srcIdx < dstIdx ? section.nextSibling : section);
+
+        // Persist new order
+        const newOrder = [...sectionsGrid.querySelectorAll('[data-section]')].map(s => s.dataset.section);
+        saveStatsPrefs({ ...loadStatsPrefs(), section_order: newOrder });
+      });
+    });
+  }
+
   function wireStatsView(statsView, stats = {}) {
     const allGames = state.games;
     if (_statsEscController) _statsEscController.abort();
@@ -2988,7 +3683,8 @@
       if (firstGame) openQuickLogSession(firstGame);
     });
 
-    // Stats section info popover toggles (all sections share .health-info-btn pattern)
+    // Direct drag-and-drop reordering of stats sections
+    _bindStatsSectionDragDrop(statsView);
     statsView.addEventListener('click', (e) => {
       const btn = e.target.closest('.health-info-btn');
       if (!btn) return;
@@ -3092,26 +3788,103 @@
     const restoreBtn   = statsView.querySelector('#stats-restore-btn');
     const restoreInput = statsView.querySelector('#stats-restore-file');
     if (restoreBtn && restoreInput) {
+      let _pendingFile = null;
       restoreBtn.addEventListener('click', () => restoreInput.click());
       restoreInput.addEventListener('change', async () => {
         const file = restoreInput.files[0];
         if (!file) return;
-        restoreInput.value = '';
-        const confirmed = await showConfirm(
-          'Restore from Backup',
-          'This will replace all current data with the backup. This cannot be undone. Continue?'
-        );
-        if (!confirmed) return;
+        _pendingFile = file;
         try {
           await withLoading(restoreBtn, async () => {
-            const result = await API.restoreBackup(file);
-            showToast(result?.detail || 'Restore successful! Reloading…', 'success', 4000);
-            setTimeout(() => location.reload(), 2000);
-          }, 'Restoring…');
+            const preview = await API.previewRestore(file);
+            _showRestorePreview(preview, file, restoreBtn);
+          }, 'Reading backup…');
         } catch (err) {
-          showToast(`Restore failed: ${classifyError(err)}`, 'error');
+          showToast(`Could not read backup: ${classifyError(err)}`, 'error');
+          _pendingFile = null;
         }
       });
+
+      function _showRestorePreview(preview, file, btn) {
+        const gameListHtml = preview.games_preview && preview.games_preview.length
+          ? preview.games_preview.map(n => `<li class="restore-preview-game">${escapeHtml(n)}</li>`).join('')
+          : '<li class="restore-preview-empty">(empty)</li>';
+
+        const content = `
+          <div class="restore-preview" role="dialog" aria-modal="true" aria-label="Backup Preview">
+            <div class="restore-preview-header">
+              <h3>Backup Preview</h3>
+            </div>
+            <div class="restore-preview-stats">
+              <div class="restore-preview-stat"><span class="restore-preview-num">${preview.game_count}</span> games</div>
+              <div class="restore-preview-stat"><span class="restore-preview-num">${preview.session_count}</span> sessions</div>
+              <div class="restore-preview-stat"><span class="restore-preview-num">${preview.player_count}</span> players</div>
+              <div class="restore-preview-stat"><span class="restore-preview-num">${preview.media_file_count}</span> media files</div>
+            </div>
+            <div class="restore-preview-detail">
+              <span class="restore-preview-subtitle">Status breakdown</span>
+              <div class="restore-preview-statuses">
+                <span class="status-pill">Owned: ${preview.owned_count ?? '—'}</span>
+                <span class="status-pill">Wishlist: ${preview.wishlist_count ?? '—'}</span>
+                <span class="status-pill">Sold: ${preview.sold_count ?? '—'}</span>
+              </div>
+            </div>
+            <div class="restore-preview-games">
+              <span class="restore-preview-subtitle">Games in backup</span>
+              <ul class="restore-preview-game-list">${gameListHtml}</ul>
+            </div>
+            <p class="restore-preview-warning">This will replace <strong>all</strong> current data with the backup.</p>
+            <div class="restore-preview-actions">
+              <button class="btn btn-secondary" id="restore-preview-cancel">Cancel</button>
+              <button class="btn btn-danger" id="restore-preview-confirm">Restore from Backup</button>
+            </div>
+          </div>
+        `;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'restore-preview-overlay';
+        overlay.innerHTML = content;
+        document.body.appendChild(overlay);
+
+        const cancelBtn = overlay.querySelector('#restore-preview-cancel');
+        const confirmBtn = overlay.querySelector('#restore-preview-confirm');
+
+        const close = () => {
+          document.removeEventListener('keydown', onKey);
+          overlay.remove();
+          restoreInput.value = '';
+        };
+
+        const onKey = (e) => {
+          if (e.key === 'Escape') { e.preventDefault(); close(); }
+        };
+        document.addEventListener('keydown', onKey);
+
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay) close();
+        });
+        cancelBtn.addEventListener('click', close);
+        confirmBtn.addEventListener('click', async () => {
+          close();
+          const confirmed = await showConfirm(
+            'Restore from Backup',
+            'This will replace all current data. This cannot be undone. Continue?'
+          );
+          if (!confirmed) return;
+          try {
+            await withLoading(btn, async () => {
+              const result = await API.restoreBackup(file);
+              showToast(result?.detail || 'Restore successful! Reloading…', 'success', 4000);
+              setTimeout(() => location.reload(), 2000);
+            }, 'Restoring…');
+          } catch (err) {
+            showToast(`Restore failed: ${classifyError(err)}`, 'error');
+          }
+        });
+
+        requestAnimationFrame(() => overlay.classList.add('open'));
+        cancelBtn.focus();
+      }
     }
 
     // BGG plays import
@@ -3464,9 +4237,42 @@
     });
   }
 
+  async function _prefetchStats() {
+    // Don't prefetch if stats are already loaded or a load is in progress
+    const statsContent = document.getElementById('stats-content');
+    if (!statsContent || _statsLoading || _statsPrefetched) return;
+    if (statsContent.children.length > 0 && !statsContent.querySelector('.loading-spinner')) return;
+    try {
+      const [stats, goals] = await Promise.all([
+        API.getStats(),
+        API.getGoals().catch(() => []),
+      ]);
+      const prefs = loadStatsPrefs();
+      _statsPrefetched = { stats, goals, prefs };
+    } catch (_) {
+      _statsPrefetched = null;
+    }
+  }
+
   async function loadStats() {
     _statsLoading = true;
     const el = document.getElementById('stats-content');
+
+    // Use prefetched data if available
+    if (_statsPrefetched) {
+      const { stats, goals, prefs } = _statsPrefetched;
+      _statsPrefetched = null;
+      el.innerHTML = '';
+      const statsView = buildStatsView(stats, [], prefs, saveStatsPrefs, goals);
+      el.appendChild(statsView);
+      wireStatsView(statsView, stats);
+      wireGoalsSection(statsView);
+      _injectMilestonesIntoGrid(statsView, prefs);
+      _animateStatBars(el);
+      _statsLoading = false;
+      return;
+    }
+
     el.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>Loading statistics…</p></div>';
     try {
       const [stats, goals] = await Promise.all([
@@ -3965,6 +4771,51 @@
   }
 
   // Wire retake tour button
+
+  // ===== Pause Mode =====
+  const PAUSE_MODE_KEY = 'cardboard_pause_mode';
+  const pauseBtn = document.getElementById('pause-mode-btn');
+  const pauseBanner = document.getElementById('pause-banner');
+  const pauseResume = document.getElementById('pause-banner-resume');
+
+  function _isPauseMode() {
+    return localStorage.getItem(PAUSE_MODE_KEY) === 'true';
+  }
+
+  function _syncPauseUI() {
+    const paused = _isPauseMode();
+    if (pauseBtn) {
+      pauseBtn.classList.toggle('active', paused);
+      pauseBtn.setAttribute('title', paused ? 'Resume streak & heat tracking' : 'Pause streak tracking for vacations/breaks');
+    }
+    if (pauseBanner) {
+      pauseBanner.style.display = paused ? 'flex' : 'none';
+    }
+  }
+
+  function _setPauseMode(paused) {
+    localStorage.setItem(PAUSE_MODE_KEY, paused ? 'true' : 'false');
+    _syncPauseUI();
+    API.setSetting(PAUSE_MODE_KEY, paused ? 'true' : '').catch(() => {});
+  }
+
+  if (pauseBtn) {
+    pauseBtn.addEventListener('click', () => {
+      const paused = !_isPauseMode();
+      _setPauseMode(paused);
+      showToast(paused ? 'Tracking paused. Streaks and heat are frozen.' : 'Tracking resumed.', 'info');
+    });
+  }
+
+  if (pauseResume) {
+    pauseResume.addEventListener('click', () => {
+      _setPauseMode(false);
+      showToast('Tracking resumed.', 'info');
+    });
+  }
+
+  _syncPauseUI();
+
   document.getElementById('retake-tour-btn')?.addEventListener('click', () => {
     localStorage.removeItem(TOUR_DONE_KEY);
     API.setSetting(TOUR_DONE_KEY, '').catch(() => {});
