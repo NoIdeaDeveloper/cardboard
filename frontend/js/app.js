@@ -1296,8 +1296,6 @@
     const navInfo = mode === 'view' ? {
       prevGame,
       nextGame,
-      prevLabel: prevGame ? prevGame.name : '',
-      nextLabel: nextGame ? nextGame.name : '',
       onPrev: prevGame ? () => openGameModal(prevGame, 'view') : null,
       onNext: nextGame ? () => openGameModal(nextGame, 'view') : null,
     } : null;
@@ -1378,12 +1376,19 @@
 
     function close() {
       document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onOutsideClick);
       popover.classList.remove('open');
       setTimeout(() => popover.remove(), 180);
     }
 
     function onKeyDown(e) {
       if (e.key === 'Escape') close();
+    }
+
+    function onOutsideClick(e) {
+      if (!popover.contains(e.target) && e.target !== anchorEl && !(anchorEl && anchorEl.contains(e.target))) {
+        close();
+      }
     }
 
     // Position logic: if anchorEl provided, position near it; otherwise centered
@@ -1454,13 +1459,7 @@
       openQuickLogSessionFull(game, compactDate);
     });
 
-    // Close on outside click
-    document.addEventListener('mousedown', function _outside(e) {
-      if (!popover.contains(e.target) && e.target !== anchorEl && !(anchorEl && anchorEl.contains(e.target))) {
-        close();
-        document.removeEventListener('mousedown', _outside);
-      }
-    });
+    document.addEventListener('mousedown', onOutsideClick);
   }
 
   function openQuickLogSessionFull(game, presetDate) {
@@ -3482,7 +3481,8 @@
 
   // ===== Stats =====
   let _statsLoading = false;
-  let _statsPrefetched = null; // { stats, goals, prefs } cache for hover prefetch
+  let _statsPrefetched = null;
+  let _statsPrefetchInFlight = false;
   let _pendingBggHighlight = false; // set when user clicks "Import from BGG" on the empty state
   const STATS_PREFS_KEY = 'cardboard_stats_prefs';
   const STATS_PREFS_DEFAULTS = {
@@ -3788,12 +3788,10 @@
     const restoreBtn   = statsView.querySelector('#stats-restore-btn');
     const restoreInput = statsView.querySelector('#stats-restore-file');
     if (restoreBtn && restoreInput) {
-      let _pendingFile = null;
       restoreBtn.addEventListener('click', () => restoreInput.click());
       restoreInput.addEventListener('change', async () => {
         const file = restoreInput.files[0];
         if (!file) return;
-        _pendingFile = file;
         try {
           await withLoading(restoreBtn, async () => {
             const preview = await API.previewRestore(file);
@@ -3801,7 +3799,6 @@
           }, 'Reading backup…');
         } catch (err) {
           showToast(`Could not read backup: ${classifyError(err)}`, 'error');
-          _pendingFile = null;
         }
       });
 
@@ -4238,10 +4235,10 @@
   }
 
   async function _prefetchStats() {
-    // Don't prefetch if stats are already loaded or a load is in progress
     const statsContent = document.getElementById('stats-content');
-    if (!statsContent || _statsLoading || _statsPrefetched) return;
+    if (!statsContent || _statsLoading || _statsPrefetched || _statsPrefetchInFlight) return;
     if (statsContent.children.length > 0 && !statsContent.querySelector('.loading-spinner')) return;
+    _statsPrefetchInFlight = true;
     try {
       const [stats, goals] = await Promise.all([
         API.getStats(),
@@ -4251,6 +4248,8 @@
       _statsPrefetched = { stats, goals, prefs };
     } catch (_) {
       _statsPrefetched = null;
+    } finally {
+      _statsPrefetchInFlight = false;
     }
   }
 

@@ -948,6 +948,52 @@ def export_pdf(db: Session = Depends(get_db)):
 
 
 RESTORE_MAX_BYTES = 500 * 1024 * 1024  # 500 MB
+_MEDIA_DIRS = ["images", "gallery", "instructions", "avatars"]
+
+
+async def _stream_backup_to_tempfile(file: UploadFile, suffix: str = ".zip", dir: str = None) -> tempfile.NamedTemporaryFile:
+    """Stream an uploaded file to a temp file, enforcing RESTORE_MAX_BYTES."""
+    kwargs = {"suffix": suffix, "delete": False}
+    if dir:
+        kwargs["dir"] = dir
+    tmp = tempfile.NamedTemporaryFile(**kwargs)
+    total = 0
+    try:
+        while True:
+            chunk = await file.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > RESTORE_MAX_BYTES:
+                tmp.close()
+                raise HTTPException(status_code=413, detail="Backup file too large (max 500 MB)")
+            tmp.write(chunk)
+    except HTTPException:
+        raise
+    except Exception:
+        tmp.close()
+        raise
+    tmp.close()
+    return tmp
+
+
+def _extract_and_validate_db(zf: zipfile.ZipFile, tmp_zip_name: str, db_suffix: str) -> tuple[sqlite3.Connection, str]:
+    """Extract cardboard.db from a ZIP and return an open, integrity-checked connection."""
+    if "cardboard.db" not in zf.namelist():
+        raise HTTPException(status_code=422, detail="Invalid backup: cardboard.db not found in ZIP")
+    db_tmp = tmp_zip_name + db_suffix
+    with zf.open("cardboard.db") as src, open(db_tmp, "wb") as dst:
+        dst.write(src.read())
+    conn = sqlite3.connect(db_tmp)
+    try:
+        integrity = conn.execute("PRAGMA integrity_check").fetchone()
+        if not integrity or integrity[0] != "ok":
+            raise HTTPException(status_code=422, detail="Backup database failed integrity check")
+    except HTTPException:
+        conn.close()
+        safe_delete_file(db_tmp)
+        raise
+    return conn, db_tmp
 
 
 @router.post("/restore", status_code=200)
@@ -966,40 +1012,16 @@ async def restore_backup(file: UploadFile = File(...)):
 
     validate_file_extension(file.filename or "", {".zip"}, "Only .zip backup files are allowed")
 
-    tmp_zip = tempfile.NamedTemporaryFile(suffix=".zip", delete=False, dir=data_dir)
+    tmp_zip = await _stream_backup_to_tempfile(file, dir=data_dir)
+    db_tmp = None
     try:
-        total = 0
-        while True:
-            chunk = await file.read(65536)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > RESTORE_MAX_BYTES:
-                tmp_zip.close()
-                raise HTTPException(status_code=413, detail="Backup file too large (max 500 MB)")
-            tmp_zip.write(chunk)
-        tmp_zip.close()
-
         with zipfile.ZipFile(tmp_zip.name, "r") as zf:
-            names = zf.namelist()
-            if "cardboard.db" not in names:
-                raise HTTPException(status_code=422, detail="Invalid backup: cardboard.db not found in ZIP")
+            conn, db_tmp = _extract_and_validate_db(zf, tmp_zip.name, ".restore.db")
+            conn.close()
 
-            # Restore database — temp file is in same dir as db_path so os.replace is atomic
-            db_tmp = tmp_zip.name + ".restore.db"
-            with zf.open("cardboard.db") as src, open(db_tmp, "wb") as dst:
-                dst.write(src.read())
-
-            # Validate it's a real SQLite database
-            try:
-                conn = sqlite3.connect(db_tmp)
-                conn.execute("PRAGMA integrity_check")
-                conn.close()
-            except Exception:
-                raise HTTPException(status_code=422, detail="Invalid backup: database file is corrupt")
-
-            # Atomically replace the database
+            # Atomically replace the database — temp file is in same dir as db_path
             os.replace(db_tmp, db_path)
+            db_tmp = None  # os.replace consumed it
 
             # Invalidate the connection pool so all future requests open fresh
             # connections against the restored file (old pooled connections still
@@ -1008,12 +1030,10 @@ async def restore_backup(file: UploadFile = File(...)):
 
             # Restore media directories (optional — skip missing)
             safe_data_dir = os.path.realpath(data_dir) + os.sep
-            for arc_path in names:
-                # Only restore known subdirs
-                if not any(arc_path.startswith(d + "/") for d in ["images", "gallery", "instructions", "avatars"]):
+            for arc_path in zf.namelist():
+                if not any(arc_path.startswith(d + "/") for d in _MEDIA_DIRS):
                     continue
                 dest = os.path.realpath(os.path.join(data_dir, arc_path))
-                # Reject any path that escapes data_dir (ZIP path traversal)
                 if not dest.startswith(safe_data_dir):
                     continue
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -1030,8 +1050,8 @@ async def restore_backup(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Restore failed. The backup may be invalid.")
     finally:
         safe_delete_file(tmp_zip.name)
-        if os.path.exists(tmp_zip.name + ".restore.db"):
-            safe_delete_file(tmp_zip.name + ".restore.db")
+        if db_tmp:
+            safe_delete_file(db_tmp)
 
 
 @router.post("/restore/preview", status_code=200)
@@ -1043,51 +1063,26 @@ async def preview_restore(file: UploadFile = File(...)):
     """
     validate_file_extension(file.filename or "", {".zip"}, "Only .zip backup files are allowed")
 
-    tmp_zip = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    tmp_zip = await _stream_backup_to_tempfile(file)
+    db_tmp = None
     try:
-        total = 0
-        while True:
-            chunk = await file.read(65536)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > RESTORE_MAX_BYTES:
-                tmp_zip.close()
-                raise HTTPException(status_code=413, detail="Backup file too large (max 500 MB)")
-            tmp_zip.write(chunk)
-        tmp_zip.close()
-
         with zipfile.ZipFile(tmp_zip.name, "r") as zf:
             names = zf.namelist()
-            if "cardboard.db" not in names:
-                raise HTTPException(status_code=422, detail="Invalid backup: cardboard.db not found in ZIP")
-
-            db_tmp = tmp_zip.name + ".preview.db"
-            with zf.open("cardboard.db") as src, open(db_tmp, "wb") as dst:
-                dst.write(src.read())
-
+            conn, db_tmp = _extract_and_validate_db(zf, tmp_zip.name, ".preview.db")
             try:
-                conn = sqlite3.connect(db_tmp)
-                integrity = conn.execute("PRAGMA integrity_check").fetchone()
-                if not integrity or integrity[0] != "ok":
-                    conn.close()
-                    raise HTTPException(status_code=422, detail="Backup database failed integrity check")
-
                 game_count = conn.execute("SELECT COUNT(*) FROM games").fetchone()[0]
                 session_count = conn.execute("SELECT COUNT(*) FROM play_sessions").fetchone()[0]
                 player_count = conn.execute("SELECT COUNT(*) FROM players").fetchone()[0]
 
-                owned_count = 0
-                wishlist_count = 0
-                sold_count = 0
+                status_counts = {}
                 try:
-                    owned_count = conn.execute("SELECT COUNT(*) FROM games WHERE status = 'owned'").fetchone()[0]
-                    wishlist_count = conn.execute("SELECT COUNT(*) FROM games WHERE status = 'wishlist'").fetchone()[0]
-                    sold_count = conn.execute("SELECT COUNT(*) FROM games WHERE status = 'sold'").fetchone()[0]
+                    for status, cnt in conn.execute(
+                        "SELECT status, COUNT(*) FROM games GROUP BY status"
+                    ).fetchall():
+                        status_counts[status] = cnt
                 except Exception:
                     pass
 
-                # Get top 15 games by name for preview
                 try:
                     games_preview = [
                         row[0] for row in
@@ -1096,28 +1091,23 @@ async def preview_restore(file: UploadFile = File(...)):
                 except Exception:
                     games_preview = []
 
-                # Get media file count from ZIP
                 media_count = sum(
                     1 for n in names
-                    if any(n.startswith(d + "/") for d in ["images", "gallery", "instructions", "avatars"])
-                    and not n.endswith("/")
+                    if any(n.startswith(d + "/") for d in _MEDIA_DIRS) and not n.endswith("/")
                 )
-
+            finally:
                 conn.close()
 
-                return {
-                    "game_count": game_count,
-                    "session_count": session_count,
-                    "player_count": player_count,
-                    "owned_count": owned_count,
-                    "wishlist_count": wishlist_count,
-                    "sold_count": sold_count,
-                    "games_preview": games_preview,
-                    "media_file_count": media_count,
-                }
-            finally:
-                if os.path.exists(db_tmp):
-                    os.remove(db_tmp)
+        return {
+            "game_count": game_count,
+            "session_count": session_count,
+            "player_count": player_count,
+            "owned_count": status_counts.get("owned", 0),
+            "wishlist_count": status_counts.get("wishlist", 0),
+            "sold_count": status_counts.get("sold", 0),
+            "games_preview": games_preview,
+            "media_file_count": media_count,
+        }
     except HTTPException:
         raise
     except Exception as exc:
@@ -1125,8 +1115,8 @@ async def preview_restore(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Failed to preview backup")
     finally:
         safe_delete_file(tmp_zip.name)
-        if os.path.exists(tmp_zip.name + ".preview.db"):
-            safe_delete_file(tmp_zip.name + ".preview.db")
+        if db_tmp:
+            safe_delete_file(db_tmp)
 
 
 @router.get("/bgg-search")

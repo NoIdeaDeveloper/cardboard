@@ -311,10 +311,10 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
   const _navButtonsHtml = navInfo && (navInfo.prevGame || navInfo.nextGame)
     ? `<div class="modal-nav-buttons">
         ${navInfo.prevGame
-          ? `<button class="modal-nav-btn modal-nav-prev" aria-label="Previous: ${escapeHtml(navInfo.prevLabel)}" title="Previous: ${escapeHtml(navInfo.prevLabel)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>`
+          ? `<button class="modal-nav-btn modal-nav-prev" aria-label="Previous: ${escapeHtml(navInfo.prevGame.name)}" title="Previous: ${escapeHtml(navInfo.prevGame.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>`
           : `<button class="modal-nav-btn modal-nav-prev" disabled aria-label="No previous game"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>`}
         ${navInfo.nextGame
-          ? `<button class="modal-nav-btn modal-nav-next" aria-label="Next: ${escapeHtml(navInfo.nextLabel)}" title="Next: ${escapeHtml(navInfo.nextLabel)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>`
+          ? `<button class="modal-nav-btn modal-nav-next" aria-label="Next: ${escapeHtml(navInfo.nextGame.name)}" title="Next: ${escapeHtml(navInfo.nextGame.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>`
           : `<button class="modal-nav-btn modal-nav-next" disabled aria-label="No next game"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>`}
       </div>`
     : '';
