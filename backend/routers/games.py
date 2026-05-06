@@ -993,6 +993,10 @@ def _extract_and_validate_db(zf: zipfile.ZipFile, tmp_zip_name: str, db_suffix: 
         conn.close()
         safe_delete_file(db_tmp)
         raise
+    except sqlite3.DatabaseError:
+        conn.close()
+        safe_delete_file(db_tmp)
+        raise HTTPException(status_code=422, detail="Backup database is corrupt or not a valid SQLite file")
     return conn, db_tmp
 
 
