@@ -105,7 +105,7 @@ html.view-transitioning *::after {
   transition: none !important;
 }
 
-html { font-size: 16px; }
+html { font-size: 16px; scrollbar-gutter: stable; }
 
 html, body { margin: 0; padding: 0; }
 
@@ -2072,6 +2072,7 @@ button.footer-link {
 @media (max-width: 768px) {
   .modal-close-bar {
     display: flex;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
   }
 }
 
@@ -5685,7 +5686,7 @@ img.player-profile-avatar { display: block; }
   .sort-group, .view-toggle, .bulk-status-select { margin-right: 8px; }
   .bulk-status-select { min-width: 120px; }
   .games-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
-  .modal { padding: 0; align-items: flex-end; }
+  .modal { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); align-items: flex-end; }
   .modal-container { max-width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; max-height: 92dvh; }
   .form-grid { grid-template-columns: 1fr; }
   .session-form-grid { grid-template-columns: 1fr; }
@@ -5723,11 +5724,20 @@ img.player-profile-avatar { display: block; }
   .games-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .header-inner { padding: 0 16px; }
   .main { padding: 20px 16px 84px; } /* extra bottom padding for nav bar */
-  .modal-body { padding: 18px; }
+  .modal-body { padding: 16px; }
+  .modal-hero { height: 160px; }
   .game-form { padding: 18px; }
   .value-summary { gap: 8px; }
   .value-pill { padding: 10px 8px; }
   .value-pill-value { font-size: 1.05rem; }
+
+  /* Stats page mobile */
+  .stats-title { font-size: 1.35rem; }
+  .stats-header { margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+  .stats-section { padding: 14px 12px; }
+  .stat-cards { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+  .stat-card { padding: 14px 10px; }
+  .stat-card-value { font-size: 1.4rem; }
 
   .bottom-nav {
     display: flex;
@@ -5780,6 +5790,7 @@ img.player-profile-avatar { display: block; }
 
 @media (max-width: 768px) and (orientation: landscape) {
   .modal-container { max-height: 96vh; }
+  .modal-body { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
   .main { padding: 16px; }
   .header { padding: 6px 0; padding-top: max(6px, env(safe-area-inset-top, 0px)); }
 }

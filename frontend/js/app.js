@@ -1873,7 +1873,7 @@
         player_names: last.players || [],
         notes: '',
         winner: last.winner || '',
-        session_rating: last.session_rating || 0,
+        session_rating: last.session_rating || null,
         solo: !!last.solo,
       };
       if (last.player_scores && Object.keys(last.player_scores).length) {
@@ -1918,7 +1918,7 @@
               player_names: capturedSession.players || [],
               notes: capturedSession.notes || '',
               winner: capturedSession.winner || '',
-              session_rating: capturedSession.session_rating || 0,
+              session_rating: capturedSession.session_rating || null,
               solo: !!capturedSession.solo,
             };
             if (capturedSession.player_scores) {

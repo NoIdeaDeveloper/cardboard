@@ -717,7 +717,7 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
       <div class="modal-section">
         <div class="section-label-row">
           <div class="section-label">Play History</div>
-          <button class="btn btn-ghost btn-sm" id="log-session-toggle">+ Log Session</button>
+          <button class="btn btn-secondary btn-sm" id="log-session-toggle">+ Log Session</button>
         </div>
         ${sparklineHtml}
         <div class="log-session-form" id="log-session-form" style="display:none">
