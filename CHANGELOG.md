@@ -9,13 +9,17 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [0.3.0] — 2026-05-06
+
 ### Added
 
 - **Backup restore preview** — selecting a backup ZIP now shows a preview dialog before committing: game count, session count, player count, media file count, status breakdown (owned / wishlist / sold), and the first 15 game names. A second confirmation is required before any data is replaced.
 - **BGG search thumbnails** — game thumbnails from BoardGameGeek are now shown inline in the BGG search results list, making it easier to confirm the right game before importing.
 - **Compact quick-log popover** — clicking "+ Log" on a game card now opens a small popover with date, rating, and duration fields rather than the full overlay form. A "More" button still opens the full form if needed.
 - **Repeat last session button** — owned games with at least one prior session show a "↻ Repeat" button on the card hover actions. It logs a new session today, copying player list, duration, and rating from the most recent session.
-- **Modal prev/next navigation** — left and right arrow buttons (and keyboard ← / →) let users navigate between games without closing and reopening the detail modal.
+- **Modal game navigation bar** — prev/next game navigation is now a dedicated bar between the cover image and the game content, showing the adjacent game's name as a label on each button. Previously the arrow buttons were overlaid on the cover image with no context. Keyboard ← / → navigation is unchanged.
 - **Bulk shift-click selection** — holding Shift while clicking a game card in bulk-select mode now selects or deselects the entire range between the last clicked card and the current one.
 - **Select All in bulk toolbar** — a "Select All / Deselect All" toggle button appears in the bulk action toolbar.
 - **Undo for bulk delete** — a toast with an undo action appears after a bulk delete, allowing the removed games to be recreated.
@@ -34,21 +38,6 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 - **Sticky close button in modals (mobile)** — a floating Close button sticks to the bottom of the game detail modal and players modal on mobile, so users don't need to scroll back to the top to dismiss.
 - **Mobile form wizard for Add Game** — on screens ≤ 768 px the add-game form is split into four numbered steps (Basic Info → Players & Time → Tags & Labels → Ownership) with Back / Next buttons and step indicators. The full form remains visible on desktop.
 - **Game night dismiss button** — individual game suggestions in the Game Night modal can now be dismissed with an × button; dismissed games animate out and a "Reset & re-roll" option appears when all suggestions are dismissed.
-
-### Changed
-
-- **Game night re-roll** — the suggest button now fetches a fresh set of suggestions rather than replacing the rendered list in-place, and a "🔄 Re-roll with new games" link appears when some suggestions have been dismissed.
-- **Sort direction uses `data-tooltip`** — the sort-direction button tooltip now updates via `data-tooltip` (CSS tooltip system) instead of `title`.
-
-### Fixed
-
-- **Add Game submit button hidden on desktop after form wizard init** — `_initFormWizard` called `showStep(0)` unconditionally, setting `submitBtn.style.display = 'none'` as an inline style that overrode the CSS rule on desktop, making the form impossible to submit without a mobile breakpoint.
-- **Restore same backup file unresponsive after canceling preview** — the restore file input was never cleared after the preview dialog was dismissed, so selecting the same file a second time did not fire the `change` event.
-- **Backup integrity check result not inspected** — the `preview_restore` endpoint ran `PRAGMA integrity_check` but discarded the result; a corrupt backup database would silently pass validation and return garbage counts. The result is now verified and a 422 is returned on failure.
-- **Unnecessary API call on every page load from pause mode sync** — `_syncPauseUI()` was called at startup and unconditionally pushed the pause-mode value to the server settings endpoint, even when the value had not changed. Server sync is now only performed when the user actually toggles the setting.
-
----
-
 - **Server-side stats aggregations** — the stats endpoint now precomputes and returns top mechanics (top 10 by count across owned games), dormant games (owned base games not played in 12+ months), recently added (top 5 owned/sold base games by date added), never-played list (owned base games with no sessions), neglected favorite (most-played owned game inactive for 6+ months), rating-vs-BGG delta (top 8 by absolute difference), collection health score, added-by-month for owned games only, daily and weekly play streaks, top wishlist game, and unplayed count matching the top mechanic. These replace equivalent client-side passes over the full game list.
 - **Mechanic and category frequency counts on collection stats** — `GET /api/collection/stats` now returns `mechanic_counts` and `category_counts` dicts (name → game count, sorted by frequency) so the collection filter chips no longer need to iterate all loaded games client-side.
 - **Zero-filled player stats month series** — `GET /api/players/{id}/stats` now returns `sessions_by_month` and `win_rate_by_month` pre-filled for the trailing 12 calendar months, inserting zero-count entries for months with no activity. Bar charts render a full 12-column grid without client-side alignment.
@@ -62,6 +51,8 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Game night re-roll** — the suggest button now fetches a fresh set of suggestions rather than replacing the rendered list in-place, and a "🔄 Re-roll with new games" link appears when some suggestions have been dismissed.
+- **Sort direction uses `data-tooltip`** — the sort-direction button tooltip now updates via `data-tooltip` (CSS tooltip system) instead of `title`.
 - **Stats page no longer fetches the full game list** — the stats view previously loaded up to 5 000 games in parallel with the stats request, then iterated the full array for every aggregation. All heavy computations are now server-side; the extra `GET /api/games/` call on stats load has been removed.
 - **Player session covers use primary image over BGG thumbnail** — the player sessions drill-down modal now prefers the locally cached `image_url` when available and falls back to `thumbnail_url` (the small BGG thumbnail) only when the primary image is absent, showing higher-quality covers in the session history list.
 - **Real-time inline validation on the add-game form** — the name, min/max players, min/max playtime, and difficulty fields now show errors while typing, not only on submit. A green border appears when the value becomes valid. All `.valid` markers are cleared when the form resets after a successful save.
@@ -71,14 +62,24 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 - **`prefers-contrast: more` support** — borders are strengthened and muted text colours are elevated to improve legibility when the user has enabled high-contrast mode in their OS.
 - **Mobile touch targets** — icon buttons expand to a 44 × 44 px minimum hit area on screens ≤ 600 px, meeting the WCAG 2.1 touch target guideline while keeping the visual size unchanged.
 - **Modals use dynamic viewport height** — `max-height` switched from `90vh`/`92vh` to `90dvh`/`92dvh` so modals are not clipped when the mobile browser's address bar collapses or expands.
+- **Mobile modal safe-area support** — the bottom-sheet modal now pads past the device safe-area inset so content is not obscured by the iPhone home indicator or a landscape notch; the hero image is reduced to 160 px on small screens to maximise visible content.
+- **Mobile stats page scaling** — on screens ≤ 480 px the stats title, section padding, and stat card sizes are all scaled down to fit comfortably without horizontal overflow.
 - **Card hover actions always visible on touch devices** — the quick-action buttons (View, + Log, Own It) that appear on hover are now always visible on touch-only devices via `@media (hover: none)`.
 - **Light theme text contrast** — `--text-3` in the light theme darkened from `#6a6a72` to `#50505a`, raising the contrast ratio from ~3.8:1 to ~5.1:1 (passes WCAG AA for normal text).
 - **Recently-played shelf fade edges** — a CSS `mask-image` gradient fades both ends of the horizontal scroll strip to indicate overflowing content.
 - **Stat card hover feedback** — all stat dashboard cards now lift and show an accent glow on hover. Previously only cards with drill-down behaviour had this effect.
 - **Gallery image alt text** — gallery thumbnails and lightbox images now use the image's caption as `alt` text when one exists, falling back to "Photo N of {game name}" instead of an empty string.
+- **"Log Session" button style** — the "+ Log Session" toggle in the game modal's Play History section now uses the secondary button style, matching the Refresh BGG and Share buttons in the same modal.
 
 ### Fixed
 
+- **Corrupt backup returned 500 instead of 422** — `PRAGMA integrity_check` on a non-SQLite file raises `sqlite3.DatabaseError: file is not a database`, which was not caught and fell through to the generic 500 handler. The exception is now caught alongside the existing `HTTPException` path and re-raised as a 422 with a clear message.
+- **Repeat session failed when previous session had no rating** — `session_rating: last.session_rating || 0` sent `0` to the API, which rejects ratings below 1. The value is now `null` when the source session was unrated, matching how the quick-log and log-session forms omit the field. The same fix applies to the undo-restore path for deleted sessions.
+- **Layout width shifted when switching filter tabs** — switching between tabs with different numbers of games caused the 6 px custom scrollbar to appear or disappear, shifting all content horizontally. `scrollbar-gutter: stable` is now set on `html`, reserving the gutter space permanently so the layout never reflows. This also prevents the same shift when modals open and set `overflow: hidden` on the body.
+- **Add Game submit button hidden on desktop after form wizard init** — `_initFormWizard` called `showStep(0)` unconditionally, setting `submitBtn.style.display = 'none'` as an inline style that overrode the CSS rule on desktop, making the form impossible to submit without a mobile breakpoint.
+- **Restore same backup file unresponsive after canceling preview** — the restore file input was never cleared after the preview dialog was dismissed, so selecting the same file a second time did not fire the `change` event.
+- **Backup integrity check result not inspected** — the `preview_restore` endpoint ran `PRAGMA integrity_check` but discarded the result; a corrupt backup database would silently pass validation and return garbage counts. The result is now verified and a 422 is returned on failure.
+- **Unnecessary API call on every page load from pause mode sync** — `_syncPauseUI()` was called at startup and unconditionally pushed the pause-mode value to the server settings endpoint, even when the value had not changed. Server sync is now only performed when the user actually toggles the setting.
 - **Goals game-select dropdown always empty** — `buildStatsView` was refactored to receive an empty game list, but the goals section's "Game" dropdown still built its `<option>` elements from that parameter. Selecting the "Game Sessions" goal type showed an empty picker with no games, and saving raised "Please select a game" regardless. The dropdown now reads from the loaded game state directly.
 - **Recently Added included wishlist games and expansions** — the server query had no status or parent-game filter, so wishlist entries and expansion packs could appear at the top of the "Recently Added" stats section. The query now restricts to owned and sold base games only.
 - **Shelf of Shame included expansion games** — the never-played query lacked the `parent_game_id IS NULL` guard present on every other ownership-scoped query in the stats endpoint (dormant, health score, top mechanics, etc.). Expansions that had never been played individually were incorrectly listed alongside base games.
@@ -258,7 +259,8 @@ Initial public release.
 - Single Docker container deployment; Unraid instructions included
 - Pre-built images published to GHCR on version tags (`ghcr.io/noideadeveloper/cardboard`)
 
-[Unreleased]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.7...HEAD
+[Unreleased]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.7...v0.3.0
 [0.2.7]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.4...v0.2.5
