@@ -11,6 +11,39 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.4.0] — 2026-05-16
+
+### Added
+
+- **Best at X Players** — the stats endpoint now returns the optimal player count for each owned base game, ranked by average session rating. Only player counts with at least 2 logged sessions are considered, preventing one-off outliers from dominating the result.
+- **Play projection** — the stats endpoint estimates when all currently unplayed games will be cleared at the current play rate, returning projected clear date, weeks to clear, and weekly average.
+- **Collection churn dashboard** — the stats endpoint now tracks total games ever acquired (owned + sold + wishlist), total sold, churn rate (sold ÷ ever acquired), and games acquired or sold in the current calendar year.
+- **Collection health notifications** — the stats endpoint returns up to four contextual nudges based on play percentage, collection diversity, neglected favorites, mechanic gaps, and streak status.
+- **`GET /api/games/recently-played`** — new endpoint returning the most recently played owned base games (up to 50, default 8), ordered by `last_played` descending.
+- **`GET /api/games/export/json`** — direct JSON download of the full collection (all statuses, all fields). Previously only available bundled inside the ZIP backup.
+- **`GET /api/games/export/csv`** — direct CSV download of the full collection with all standard fields. Previously only available via the Settings panel's CSV export action.
+- **Rating and date filters for `GET /api/games/`** — three new query parameters: `rating_min` and `rating_max` filter by user rating (1–10), and `added_month` (format `YYYY-MM`) restricts results to games added in a specific month.
+- **Label, designer, and publisher frequency counts on collection stats** — `GET /api/collection/stats` now returns `label_counts`, `designer_counts`, and `publisher_counts` dicts (name → owned-game count, sorted by frequency), eliminating the need for client-side iteration over the full game list to build filter chips.
+- **Service worker API cache size limit** — a `trimCache` helper caps the API response cache at 50 entries (oldest evicted first) to prevent unbounded growth on long-running installs.
+
+### Fixed
+
+- **Player rename corrupted win counts** — renaming a player updated the `Player` row but left all `PlaySession.winner` strings pointing to the old name. Every subsequent win-count query returned 0, silently erasing the player's entire win history. The rename endpoint now bulk-updates `PlaySession.winner` before committing.
+- **BGG plays import created duplicates on reimport** — uploading the same BGG plays XML file twice doubled every session with no deduplication. The importer now counts existing sessions at the same `(game_id, played_at)` and skips that many entries, preserving correct behaviour for multi-play-on-same-day records.
+- **Gallery file upload silently stopped after first error** — a failed upload inside the multi-file loop propagated uncaught, aborting all remaining files with no user feedback. Each file is now wrapped in a try/catch; a per-file error toast is shown and remaining uploads continue.
+- **Image cache exhausted SQLite connection pool** — concurrent background image downloads could open more database connections than the pool allowed. Downloads are now limited to 2 concurrent tasks via a `BoundedSemaphore`.
+- **Backup temp files leaked on server crash** — `FileResponse` background tasks that clean up temp ZIP files never ran if the server was killed mid-request. An `atexit` handler now cleans up any tracked temp files on shutdown.
+- **CSV import row failure rolled back entire batch** — a single bad row would call `db.rollback()`, discarding all previously imported games in the same request. Each row is now wrapped in a savepoint so failures are isolated and the rest of the batch commits.
+- **CSV import `NameError` in error reporting** — the `name` variable was assigned inside the `try` block, so if a row failed before that assignment the `except` clause itself raised `NameError`. `name` is now initialised to `""` before the block.
+- **Tour retake button didn't restart the tour** — clicking "Retake Tour" cleared the done flags but didn't reset `_tourCheckDone`, so `startTour` immediately returned. The flag is now cleared before calling `startTour`.
+- **`localStorage` access threw in private-browsing mode** — several `localStorage.getItem/setItem/removeItem` calls in the tour flow were not guarded, causing a `SecurityError` in browsers that block storage in private mode. All calls are now wrapped in try/catch.
+- **Tour completion flag lost when tab closed immediately** — `endTour` fired-and-forgot the `API.setSetting` call, so closing the tab before the request completed left the server flag unset and the tour reappeared on the next visit from a different browser. `endTour` is now async and awaits the server call.
+- **"Load more" applied stale page to a newer collection load** — if the user triggered a fresh collection load while a "load more" request was in flight, the stale page was appended to the new collection. The request ID is now captured before the fetch and checked before merging results.
+- **`animateCountUp` crashed when target was `NaN`** — passing a non-numeric value (e.g. from a missing stat field) caused the animation frame loop to calculate `NaN` positions and corrupt the displayed number. An `isNaN` guard now exits early.
+- **BGG rate-limiter IP dict pruned too infrequently** — stale IP entries were only removed when the dict exceeded 1 000 keys, allowing memory to grow unboundedly on public-facing servers. The threshold is now 50 keys.
+
+---
+
 ## [0.3.0] — 2026-05-06
 
 ### Added
@@ -259,7 +292,8 @@ Initial public release.
 - Single Docker container deployment; Unraid instructions included
 - Pre-built images published to GHCR on version tags (`ghcr.io/noideadeveloper/cardboard`)
 
-[Unreleased]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.7...v0.3.0
 [0.2.7]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/NoIdeaDeveloper/cardboard/compare/v0.2.5...v0.2.6
