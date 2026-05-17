@@ -16,6 +16,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
+import atexit
 from datetime import date as _date, datetime, timezone
 from typing import List, Optional
 
@@ -53,20 +54,22 @@ _bgg_buckets: dict[str, list[float]] = _collections.defaultdict(list)
 _bgg_lock = _threading.Lock()
 _bgg_ssl_ctx = ssl.create_default_context(cafile=certifi.where())
 
+# Limit concurrent image caching to avoid exhausting the SQLite connection pool
+_cache_semaphore = _threading.BoundedSemaphore(2)
+
 
 def _check_bgg_rate_limit(request: Request) -> None:
     ip = request.client.host if request.client else "unknown"
     now = time.time()
     cutoff = now - _BGG_RATE_WINDOW
     with _bgg_lock:
+        # Evict old timestamps for this IP
         timestamps = _bgg_buckets[ip]
-        # Evict old timestamps
         _bgg_buckets[ip] = [t for t in timestamps if t > cutoff]
         if len(_bgg_buckets[ip]) >= _BGG_RATE_LIMIT:
             raise HTTPException(status_code=429, detail="Too many BGG requests — please wait a moment")
         _bgg_buckets[ip].append(now)
-        # Prune stale IPs (empty buckets after eviction) to prevent unbounded growth
-        if len(_bgg_buckets) > 1000:
+        if len(_bgg_buckets) > 50:
             stale = [k for k, v in _bgg_buckets.items() if not v]
             for k in stale:
                 del _bgg_buckets[k]
@@ -105,66 +108,74 @@ def _cache_game_image(game_id: int, image_url: str) -> None:
         logger.warning("Image cache refused for game %d: %s", game_id, err_msg)
         return
 
-    # Abort early if the URL has already been changed (e.g. user uploaded a file
-    # or changed the URL before this background task ran).
-    with SessionLocal() as db:
-        game = db.query(models.Game).filter(models.Game.id == game_id).first()
-        if not game or game.image_url != image_url:
-            logger.info("Image cache skipped for game %d: URL has changed", game_id)
-            return
-        # Mark as pending while the download is in progress
-        game.image_cache_status = "pending"
-        db.commit()
-
-    os.makedirs(IMAGES_DIR, exist_ok=True)
+    acquired = _cache_semaphore.acquire(blocking=False)
+    if not acquired:
+        logger.warning("Image cache deferred for game %d: too many concurrent downloads", game_id)
+        return
 
     try:
-        req = urllib.request.Request(image_url, headers={"User-Agent": "Cardboard/1.0"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            content_type = resp.headers.get("Content-Type", "image/jpeg")
-            ext = _safe_ext(image_url, content_type)
-            dest = os.path.join(IMAGES_DIR, f"{game_id}{ext}")
-            downloaded = 0
-            # Write to a temp file first so the destination is never partial.
-            with tempfile.NamedTemporaryFile(dir=IMAGES_DIR, delete=False) as tmp:
-                tmp_path = tmp.name
-                try:
-                    while True:
-                        chunk = resp.read(65536)
-                        if not chunk:
-                            break
-                        downloaded += len(chunk)
-                        if downloaded > MAX_IMAGE_SIZE:
-                            raise ValueError("Remote image exceeds size limit")
-                        tmp.write(chunk)
-                except Exception:
-                    os.unlink(tmp_path)
-                    raise
-            os.replace(tmp_path, dest)
-    except Exception:
-        logger.exception("Image cache failed for game %d", game_id)
-        _delete_cached_image(game_id)
+        # Abort early if the URL has already been changed (e.g. user uploaded a file
+        # or changed the URL before this background task ran).
+        with SessionLocal() as db:
+            game = db.query(models.Game).filter(models.Game.id == game_id).first()
+            if not game or game.image_url != image_url:
+                logger.info("Image cache skipped for game %d: URL has changed", game_id)
+                return
+            # Mark as pending while the download is in progress
+            game.image_cache_status = "pending"
+            db.commit()
+
+        os.makedirs(IMAGES_DIR, exist_ok=True)
+
+        try:
+            req = urllib.request.Request(image_url, headers={"User-Agent": "Cardboard/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                content_type = resp.headers.get("Content-Type", "image/jpeg")
+                ext = _safe_ext(image_url, content_type)
+                dest = os.path.join(IMAGES_DIR, f"{game_id}{ext}")
+                downloaded = 0
+                # Write to a temp file first so the destination is never partial.
+                with tempfile.NamedTemporaryFile(dir=IMAGES_DIR, delete=False) as tmp:
+                    tmp_path = tmp.name
+                    try:
+                        while True:
+                            chunk = resp.read(65536)
+                            if not chunk:
+                                break
+                            downloaded += len(chunk)
+                            if downloaded > MAX_IMAGE_SIZE:
+                                raise ValueError("Remote image exceeds size limit")
+                            tmp.write(chunk)
+                    except Exception:
+                        os.unlink(tmp_path)
+                        raise
+                os.replace(tmp_path, dest)
+        except Exception:
+            logger.exception("Image cache failed for game %d", game_id)
+            _delete_cached_image(game_id)
+            with SessionLocal() as db:
+                game = db.query(models.Game).filter(models.Game.id == game_id).first()
+                if game and game.image_url == image_url:
+                    game.image_cache_status = "failed"
+                    db.commit()
+            return
+
+        # Verify the URL is still current before updating the DB — the user may have
+        # changed or uploaded a new image while we were downloading.
         with SessionLocal() as db:
             game = db.query(models.Game).filter(models.Game.id == game_id).first()
             if game and game.image_url == image_url:
-                game.image_cache_status = "failed"
+                game.image_url = f"/api/games/{game_id}/image"
+                game.image_cached = True
+                game.image_ext = ext
+                game.image_cache_status = "cached"
                 db.commit()
-        return
-
-    # Verify the URL is still current before updating the DB — the user may have
-    # changed or uploaded a new image while we were downloading.
-    with SessionLocal() as db:
-        game = db.query(models.Game).filter(models.Game.id == game_id).first()
-        if game and game.image_url == image_url:
-            game.image_url = f"/api/games/{game_id}/image"
-            game.image_cached = True
-            game.image_ext = ext
-            game.image_cache_status = "cached"
-            db.commit()
-            logger.info("Image cached for game %d", game_id)
-        else:
-            _delete_cached_image(game_id)
-            logger.info("Image cache discarded for game %d: URL changed during download", game_id)
+                logger.info("Image cached for game %d", game_id)
+            else:
+                _delete_cached_image(game_id)
+                logger.info("Image cache discarded for game %d: URL changed during download", game_id)
+    finally:
+        _cache_semaphore.release()
 
 
 def _instructions_path(game_id: int, filename: str) -> str:
@@ -369,6 +380,9 @@ def get_games(
     max_players: Optional[int] = Query(None, ge=1),
     min_playtime: Optional[int] = Query(None, ge=1),
     max_playtime: Optional[int] = Query(None, ge=1),
+    rating_min: Optional[float] = Query(None, ge=1, le=10),
+    rating_max: Optional[float] = Query(None, ge=1, le=10),
+    added_month: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$"),
     mechanics: Optional[str] = Query(None, max_length=1000),
     categories: Optional[str] = Query(None, max_length=1000),
     location: Optional[str] = Query(None, max_length=255),
@@ -433,6 +447,17 @@ def get_games(
             or_(models.Game.min_playtime.is_(None), models.Game.min_playtime <= max_playtime)
         )
 
+    if rating_min is not None:
+        query = query.filter(models.Game.user_rating >= rating_min)
+
+    if rating_max is not None:
+        query = query.filter(
+            or_(models.Game.user_rating.is_(None), models.Game.user_rating <= rating_max)
+        )
+
+    if added_month is not None:
+        query = query.filter(func.strftime("%Y-%m", models.Game.date_added) == added_month)
+
     if mechanics:
         mechanic_list = [m.strip() for m in mechanics.split(",") if m.strip()]
         if len(mechanic_list) > 50:
@@ -495,7 +520,39 @@ def get_games(
     return resp
 
 
+@router.get("/recently-played", response_model=List[schemas.GameResponse])
+def get_recently_played(
+    limit: int = Query(8, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Return the most recently played owned base games, sorted by last_played desc."""
+    games = (
+        db.query(models.Game)
+        .filter(
+            models.Game.status == "owned",
+            models.Game.parent_game_id.is_(None),
+            models.Game.last_played.isnot(None),
+        )
+        .order_by(models.Game.last_played.desc())
+        .limit(limit)
+        .all()
+    )
+    return build_game_responses(games, db)
+
+
 # ===== Backup =====
+
+# Track temporary backup files so they are cleaned up on shutdown even if the
+# background task that normally removes them never runs (e.g. server crash).
+_temp_backup_files: set[str] = set()
+
+def _cleanup_temp_backups():
+    for path in list(_temp_backup_files):
+        safe_delete_file(path)
+    _temp_backup_files.clear()
+
+atexit.register(_cleanup_temp_backups)
+
 
 @router.get("/backup")
 def download_backup(background_tasks: BackgroundTasks):
@@ -520,6 +577,7 @@ def download_backup(background_tasks: BackgroundTasks):
     # Write to a named temp file so FileResponse can seek/stat it
     tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
     tmp.close()
+    _temp_backup_files.add(tmp.name)
 
     # Use SQLite backup API — safe with active connections
     db_tmp = tmp.name + ".db"
@@ -554,8 +612,10 @@ def download_backup(background_tasks: BackgroundTasks):
         )
     except Exception:
         safe_delete_file(tmp.name)
+        _temp_backup_files.discard(tmp.name)
         raise
     background_tasks.add_task(os.remove, tmp.name)
+    background_tasks.add_task(_temp_backup_files.discard, tmp.name)
     return response
 
 
@@ -591,6 +651,7 @@ def download_json_backup(background_tasks: BackgroundTasks, db: Session = Depend
 
     tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
     tmp.close()
+    _temp_backup_files.add(tmp.name)
     try:
         with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("games.json", json.dumps(games_data, default=str, indent=2))
@@ -602,6 +663,7 @@ def download_json_backup(background_tasks: BackgroundTasks, db: Session = Depend
                         zf.write(f_path, os.path.join("media", os.path.relpath(f_path, data_dir)))
     except Exception as exc:
         safe_delete_file(tmp.name)
+        _temp_backup_files.discard(tmp.name)
         logger.error("JSON backup failed: %s", exc)
         raise HTTPException(status_code=500, detail="Backup failed. Check server logs for details.")
 
@@ -617,6 +679,7 @@ def download_json_backup(background_tasks: BackgroundTasks, db: Session = Depend
         safe_delete_file(tmp.name)
         raise
     background_tasks.add_task(os.remove, tmp.name)
+    background_tasks.add_task(_temp_backup_files.discard, tmp.name)
     return response
 
 
@@ -940,6 +1003,61 @@ def export_pdf(db: Session = Depends(get_db)):
     return Response(
         content=buffer.read(),
         media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{_safe_header_filename(filename)}"',
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+@router.get("/export/json")
+def export_json(db: Session = Depends(get_db)):
+    """Export the full collection as a JSON download (all fields, all statuses)."""
+    games = db.query(models.Game).all()
+    results = build_game_responses(games, db)
+    ts = _date.today().strftime("%Y-%m-%d")
+    filename = f"cardboard-collection-{ts}.json"
+    return Response(
+        content=json.dumps([r.model_dump(mode="json") for r in results], default=str, indent=2),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{_safe_header_filename(filename)}"',
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+@router.get("/export/csv")
+def export_csv(db: Session = Depends(get_db)):
+    """Export the full collection as a CSV download."""
+    games = db.query(models.Game).all()
+    results = build_game_responses(games, db)
+    fields = ["name", "status", "year_published", "min_players", "max_players",
+              "min_playtime", "max_playtime", "difficulty", "user_rating",
+              "bgg_id", "bgg_rating", "purchase_price", "purchase_date",
+              "purchase_location", "location", "condition", "edition",
+              "last_played", "categories", "mechanics", "designers",
+              "publishers", "labels", "user_notes"]
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fields, extrasaction='ignore')
+    writer.writeheader()
+    for r in results:
+        row = r.model_dump(mode="json")
+        for key in ("categories", "mechanics", "designers", "publishers", "labels"):
+            val = row.get(key)
+            if isinstance(val, str):
+                try:
+                    parsed = json.loads(val)
+                    if isinstance(parsed, list):
+                        row[key] = ";".join(parsed)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        writer.writerow(row)
+    ts = _date.today().strftime("%Y-%m-%d")
+    filename = f"cardboard-collection-{ts}.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
         headers={
             "Content-Disposition": f'attachment; filename="{_safe_header_filename(filename)}"',
             "Cache-Control": "no-cache",
@@ -2129,6 +2247,7 @@ async def import_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     VALID_STATUSES = {"owned", "wishlist", "sold"}
 
     for row in reader:
+        name = ""
         try:
             name = (row.get("name") or row.get("Name") or "").strip()
             if not name:
@@ -2164,34 +2283,46 @@ async def import_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
             mechanics = _csv_to_json(row.get("mechanics") or row.get("Mechanics"))
             labels = _csv_to_json(row.get("labels") or row.get("Labels"))
 
-            game = models.Game(
-                name=name,
-                status=status,
-                user_rating=user_rating,
-                user_notes=notes,
-            )
-            db.add(game)
-            db.flush()
+            # DB operations inside a savepoint so a row failure doesn't break the batch
+            savepoint = db.begin_nested()
+            try:
+                game = models.Game(
+                    name=name,
+                    status=status,
+                    user_rating=user_rating,
+                    user_notes=notes,
+                )
+                db.add(game)
+                db.flush()
 
-            tag_data = {}
-            if categories:
-                tag_data["categories"] = categories
-            if mechanics:
-                tag_data["mechanics"] = mechanics
-            if labels:
-                tag_data["labels"] = labels
-            if tag_data:
-                _save_tags(game.id, tag_data, db)
+                tag_data = {}
+                if categories:
+                    tag_data["categories"] = categories
+                if mechanics:
+                    tag_data["mechanics"] = mechanics
+                if labels:
+                    tag_data["labels"] = labels
+                if tag_data:
+                    _save_tags(game.id, tag_data, db)
 
-            db.commit()
-            results["imported"] += 1
+                savepoint.commit()
+                results["imported"] += 1
+            except Exception:
+                savepoint.rollback()
+                raise
 
         except HTTPException as http_exc:
-            db.rollback()
             results["errors"].append(f"Row '{name}': {http_exc.detail}")
         except Exception as exc:
-            db.rollback()
             logger.debug("CSV import row error for '%s': %s", name, exc)
             results["errors"].append(f"Row '{name}': {type(exc).__name__}")
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("CSV import commit failed: %s", exc)
+        results["errors"].append("Database commit failed — no games were saved")
+        results["imported"] = 0
     logger.info("CSV import: imported=%d skipped=%d errors=%d", results["imported"], results["skipped"], len(results["errors"]))
     return results

@@ -1,5 +1,6 @@
 const CACHE_NAME = 'cardboard-v2';
 const API_CACHE_NAME = 'cardboard-api-v1';
+const API_CACHE_MAX = 50;  // max entries in API cache — prevents unbounded growth
 
 const SHELL_ASSETS = [
   '/',
@@ -22,6 +23,16 @@ const CACHEABLE_API_PREFIXES = [
 
 function isCacheableApi(pathname) {
   return CACHEABLE_API_PREFIXES.some(p => pathname.startsWith(p));
+}
+
+// Trim a cache to the most recently used N entries to prevent unbounded growth.
+function trimCache(cache, max) {
+  return cache.keys().then(keys => {
+    if (keys.length <= max) return;
+    // Delete oldest entries (excess beyond max)
+    const toDelete = keys.slice(0, keys.length - max);
+    return Promise.all(toDelete.map(req => cache.delete(req)));
+  });
 }
 
 self.addEventListener('install', (e) => {
@@ -53,7 +64,10 @@ self.addEventListener('fetch', (e) => {
       e.respondWith(
         caches.open(API_CACHE_NAME).then((cache) => {
           const networkFetch = fetch(e.request).then((resp) => {
-            if (resp.ok) cache.put(e.request, resp.clone());
+            if (resp.ok) {
+              cache.put(e.request, resp.clone());
+              trimCache(cache, API_CACHE_MAX);
+            }
             return resp;
           }).catch(() => cache.match(e.request));
           return cache.match(e.request).then((cached) => cached || networkFetch);
@@ -72,7 +86,11 @@ self.addEventListener('fetch', (e) => {
       const networkFetch = fetch(e.request).then((resp) => {
         if (resp.ok && e.request.method === 'GET') {
           const clone = resp.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(e.request, clone);
+            // Trim excess non-shell entries (shell assets count as ~13 entries)
+            trimCache(cache, SHELL_ASSETS.length + 50);
+          });
         }
         return resp;
       });

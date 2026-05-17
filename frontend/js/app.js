@@ -1241,9 +1241,11 @@
       btn.textContent = `Load ${Math.min(remaining, SERVER_PAGE_SIZE)} more games…`;
       container.after(btn);
       btn.addEventListener('click', async () => {
+        const capturedReqId = _loadCollectionReqId;
         await withLoading(btn, async () => {
           try {
             const { data: nextPage, total } = await API.getGames(buildFilterParams(state.serverOffset));
+            if (capturedReqId !== _loadCollectionReqId) return;  // superseded by newer load
             if (nextPage) {
               state.games = state.games.concat(nextPage);
               state.serverOffset += nextPage.length;
@@ -4735,13 +4737,17 @@
       showStep(step);
     }
 
-    function endTour() {
+    async function endTour() {
       overlay.style.display   = 'none';
       tooltip.style.display   = 'none';
       spotlight.style.display = 'none';
       _tourCheckDone = true;
-      localStorage.setItem(TOUR_DONE_KEY, '1');
-      API.setSetting(TOUR_DONE_KEY, '1').catch(() => {});
+      try { localStorage.setItem(TOUR_DONE_KEY, '1'); } catch (_) { /* quota or private browsing */ }
+      // Await the server call so the flag persists even across browsers/devices.
+      // Without this, closing the tab immediately after completing the tour can
+      // abort the fetch and leave the server-side flag unset, causing the tour to
+      // reappear on the next visit from a different browser.
+      try { await API.setSetting(TOUR_DONE_KEY, '1'); } catch (_) { /* non-fatal */ }
     }
 
     showStep(0);
@@ -4751,7 +4757,9 @@
     if (_tourCheckDone) return;
     if (!state.games || state.games.length === 0) return;
     // Fast path: localStorage cache avoids a server round-trip on repeat visits
-    if (localStorage.getItem(TOUR_DONE_KEY)) { _tourCheckDone = true; return; }
+    let localDone = false;
+    try { localDone = !!localStorage.getItem(TOUR_DONE_KEY); } catch (_) { /* quota or unavailable */ }
+    if (localDone) { _tourCheckDone = true; return; }
     // Claim the check before any await so concurrent calls from other loadCollection
     // invocations bail out immediately rather than each starting their own tour.
     _tourCheckDone = true;
@@ -4759,7 +4767,7 @@
       const { value } = await API.getSetting(TOUR_DONE_KEY);
       if (value === '1') {
         // Sync local cache so future page loads skip the server call
-        localStorage.setItem(TOUR_DONE_KEY, '1');
+        try { localStorage.setItem(TOUR_DONE_KEY, '1'); } catch (_) { /* non-fatal */ }
         return;
       }
     } catch (_) {
@@ -4815,9 +4823,10 @@
 
   _syncPauseUI();
 
-  document.getElementById('retake-tour-btn')?.addEventListener('click', () => {
-    localStorage.removeItem(TOUR_DONE_KEY);
-    API.setSetting(TOUR_DONE_KEY, '').catch(() => {});
+  document.getElementById('retake-tour-btn')?.addEventListener('click', async () => {
+    try { localStorage.removeItem(TOUR_DONE_KEY); } catch (_) { /* quota or unavailable */ }
+    try { await API.setSetting(TOUR_DONE_KEY, ''); } catch (_) { /* non-fatal */ }
+    _tourCheckDone = false;
     startTour();
   });
 

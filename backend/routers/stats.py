@@ -724,6 +724,41 @@ def get_collection_stats(request: Request, db: Session = Depends(get_db)):
     )
     category_counts: dict[str, int] = {name: int(cnt) for name, cnt in category_count_rows}
 
+    # Label, designer, and publisher frequency counts across all owned games —
+    # eliminates the client-side O(n) pass over all game records in buildDataLists().
+    label_count_rows = (
+        db.query(models.Label.name, func.count(models.GameLabel.game_id).label("cnt"))
+        .join(models.GameLabel, models.GameLabel.label_id == models.Label.id)
+        .join(models.Game, models.Game.id == models.GameLabel.game_id)
+        .filter(models.Game.status == "owned")
+        .group_by(models.Label.name)
+        .order_by(func.count(models.GameLabel.game_id).desc())
+        .all()
+    )
+    label_counts: dict[str, int] = {name: int(cnt) for name, cnt in label_count_rows}
+
+    designer_count_rows = (
+        db.query(models.Designer.name, func.count(models.GameDesigner.game_id).label("cnt"))
+        .join(models.GameDesigner, models.GameDesigner.designer_id == models.Designer.id)
+        .join(models.Game, models.Game.id == models.GameDesigner.game_id)
+        .filter(models.Game.status == "owned")
+        .group_by(models.Designer.name)
+        .order_by(func.count(models.GameDesigner.game_id).desc())
+        .all()
+    )
+    designer_counts: dict[str, int] = {name: int(cnt) for name, cnt in designer_count_rows}
+
+    publisher_count_rows = (
+        db.query(models.Publisher.name, func.count(models.GamePublisher.game_id).label("cnt"))
+        .join(models.GamePublisher, models.GamePublisher.publisher_id == models.Publisher.id)
+        .join(models.Game, models.Game.id == models.GamePublisher.game_id)
+        .filter(models.Game.status == "owned")
+        .group_by(models.Publisher.name)
+        .order_by(func.count(models.GamePublisher.game_id).desc())
+        .all()
+    )
+    publisher_counts: dict[str, int] = {name: int(cnt) for name, cnt in publisher_count_rows}
+
     data = schemas.CollectionStatsResponse(
         total_owned=by_status["owned"],
         total_wishlist=by_status["wishlist"],
@@ -736,6 +771,9 @@ def get_collection_stats(request: Request, db: Session = Depends(get_db)):
         locations=locations,
         mechanic_counts=mechanic_counts,
         category_counts=category_counts,
+        label_counts=label_counts,
+        designer_counts=designer_counts,
+        publisher_counts=publisher_counts,
     )
     resp = JSONResponse(content=data.model_dump())
     resp.headers["ETag"] = etag

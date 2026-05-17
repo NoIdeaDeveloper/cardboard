@@ -11,7 +11,7 @@
 function animateCountUp(el, target, duration) {
   duration = duration || 600;
   const from = parseInt(el.textContent) || 0;
-  if (from === target) return;
+  if (isNaN(target) || from === target) return;
   const start = performance.now();
   function frame(now) {
     const progress = Math.min((now - start) / duration, 1);

@@ -42,15 +42,21 @@ _TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 
 @pytest.fixture(scope="function")
 def db():
-    """Yield a DB session that is rolled back after each test."""
+    """Yield a DB session that is rolled back after each test.
+
+    Uses a savepoint so that tests which call db.commit() themselves (e.g. CSV
+    import, BGG import) don't leak data across tests.  The outer transaction
+    is always rolled back.
+    """
     connection = _engine.connect()
-    transaction = connection.begin()
+    connection.begin()  # outer transaction — always rolled back
+    connection.begin_nested()  # savepoint — any db.commit() inside the test lands here
     session = _TestingSession(bind=connection)
     try:
         yield session
     finally:
         session.close()
-        transaction.rollback()
+        connection.rollback()
         connection.close()
 
 

@@ -137,6 +137,9 @@ class CollectionStatsResponse(BaseModel):
     locations: Dict[str, int] = {}
     mechanic_counts: Dict[str, int] = {}
     category_counts: Dict[str, int] = {}
+    label_counts: Dict[str, int] = {}
+    designer_counts: Dict[str, int] = {}
+    publisher_counts: Dict[str, int] = {}
 
 
 class GameImageResponse(BaseModel):
