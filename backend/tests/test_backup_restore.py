@@ -305,3 +305,87 @@ def test_restore_skips_unknown_subdirs(backup_client, file_env):
     r = _post_restore(backup_client, zip_bytes)
     assert r.status_code == 200
     assert not os.path.exists(os.path.join(file_env["data_dir"], "secrets", "token.txt"))
+
+
+# ---------------------------------------------------------------------------
+# Restore preview endpoint
+# ---------------------------------------------------------------------------
+
+def test_restore_preview_returns_counts(backup_client):
+    """Preview endpoint reports game and session counts without modifying data."""
+    raw = _get_backup_zip(backup_client)
+    r = backup_client.post(
+        "/api/games/restore/preview",
+        files={"file": ("backup.zip", io.BytesIO(raw), "application/zip")},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["game_count"] >= 1  # at least Catan seeded in fixture
+    assert "games_preview" in data
+    assert "Catan" in data["games_preview"]
+
+
+def test_restore_preview_does_not_modify_db(backup_client, file_env):
+    """Calling preview must not alter the live database."""
+    raw = _get_backup_zip(backup_client)
+
+    conn_before = sqlite3.connect(file_env["db_path"])
+    count_before = conn_before.execute("SELECT COUNT(*) FROM games").fetchone()[0]
+    conn_before.close()
+
+    backup_client.post(
+        "/api/games/restore/preview",
+        files={"file": ("backup.zip", io.BytesIO(raw), "application/zip")},
+    )
+
+    conn_after = sqlite3.connect(file_env["db_path"])
+    count_after = conn_after.execute("SELECT COUNT(*) FROM games").fetchone()[0]
+    conn_after.close()
+    assert count_before == count_after
+
+
+def test_restore_preview_corrupt_db_returns_error(backup_client):
+    """Preview must reject a corrupt cardboard.db with a 422."""
+    zip_bytes = _make_zip({"cardboard.db": b"this is not a sqlite database"})
+    r = backup_client.post(
+        "/api/games/restore/preview",
+        files={"file": ("backup.zip", io.BytesIO(zip_bytes), "application/zip")},
+    )
+    assert r.status_code == 422
+
+
+def test_restore_preview_missing_db_returns_422(backup_client):
+    """Preview must return 422 when cardboard.db is absent from the ZIP."""
+    zip_bytes = _make_zip({"other.txt": "no db here"})
+    r = backup_client.post(
+        "/api/games/restore/preview",
+        files={"file": ("backup.zip", io.BytesIO(zip_bytes), "application/zip")},
+    )
+    assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Temp file leak regression
+# ---------------------------------------------------------------------------
+
+def test_backup_registers_and_cleans_temp_files(backup_client, file_env):
+    """The _cleanup_temp_backups function must remove tracked files from disk
+    and from the tracking set.  (Background tasks run synchronously in
+    TestClient, so _temp_backup_files is already clean after a normal request.)"""
+    import routers.games as _gmod
+    _gmod._temp_backup_files.clear()
+
+    # Create a dummy temp file and register it manually, simulating what the
+    # backup endpoint does internally.
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(dir=file_env["data_dir"], delete=False, suffix=".zip")
+    tmp.write(b"fake backup")
+    tmp.close()
+
+    _gmod._temp_backup_files.add(tmp.name)
+    assert len(_gmod._temp_backup_files) == 1
+
+    # The cleanup function must remove the file and clear the tracking set
+    _gmod._cleanup_temp_backups()
+    assert len(_gmod._temp_backup_files) == 0, "Cleanup did not clear tracking set"
+    assert not os.path.exists(tmp.name), f"Temp file was not removed: {tmp.name}"

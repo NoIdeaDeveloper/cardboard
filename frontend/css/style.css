@@ -650,6 +650,7 @@ button.footer-link {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
 .sort-group {

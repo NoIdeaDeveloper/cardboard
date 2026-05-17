@@ -1,0 +1,75 @@
+"""
+Tests for user settings key-value store endpoints.
+"""
+import pytest
+
+
+def test_get_setting_returns_default_for_unknown_key(client):
+    r = client.get("/api/settings/nonexistent_key")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["key"] == "nonexistent_key"
+    assert data["value"] == ""
+
+
+def test_put_and_get_setting_roundtrip(client):
+    r = client.put(
+        "/api/settings/my_setting",
+        json={"value": "hello world"},
+    )
+    assert r.status_code == 204
+
+    r = client.get("/api/settings/my_setting")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["key"] == "my_setting"
+    assert data["value"] == "hello world"
+
+
+def test_put_setting_overwrites_existing(client):
+    client.put("/api/settings/theme", json={"value": "dark"})
+    client.put("/api/settings/theme", json={"value": "light"})
+
+    r = client.get("/api/settings/theme")
+    assert r.status_code == 200
+    assert r.json()["value"] == "light"
+
+
+def test_put_settings_persist_across_gets(client):
+    client.put("/api/settings/tour_done", json={"value": "1"})
+    client.put("/api/settings/username", json={"value": "Alice"})
+
+    r1 = client.get("/api/settings/tour_done")
+    r2 = client.get("/api/settings/username")
+    assert r1.json()["value"] == "1"
+    assert r2.json()["value"] == "Alice"
+
+
+def test_setting_value_max_length(client):
+    val = "x" * 10000
+    client.put("/api/settings/long_val", json={"value": val})
+    r = client.get("/api/settings/long_val")
+    assert len(r.json()["value"]) == 10000
+
+
+def test_put_setting_value_exceeds_max_length(client):
+    """Value longer than 10,000 characters must be rejected with 422."""
+    r = client.put("/api/settings/too_long", json={"value": "x" * 10_001})
+    assert r.status_code == 422
+
+
+def test_put_setting_empty_value(client):
+    """Empty string is a valid setting value that can overwrite a previous one."""
+    client.put("/api/settings/clearable", json={"value": "initial"})
+    client.put("/api/settings/clearable", json={"value": ""})
+    r = client.get("/api/settings/clearable")
+    assert r.status_code == 200
+    assert r.json()["value"] == ""
+
+
+def test_get_setting_key_isolation(client):
+    """Two different keys never share values."""
+    client.put("/api/settings/key_a", json={"value": "alpha"})
+    client.put("/api/settings/key_b", json={"value": "beta"})
+    assert client.get("/api/settings/key_a").json()["value"] == "alpha"
+    assert client.get("/api/settings/key_b").json()["value"] == "beta"

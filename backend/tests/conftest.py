@@ -23,7 +23,7 @@ os.environ.setdefault("LOG_LEVEL", "WARNING")  # quiet during tests
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, StaticPool
+from sqlalchemy import create_engine, event, StaticPool
 from sqlalchemy.orm import sessionmaker
 
 from database import Base, get_db
@@ -36,6 +36,14 @@ _engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
+# Enable FK enforcement to match production behaviour (database.py does the same).
+@event.listens_for(_engine, "connect")
+def _set_sqlite_pragmas(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
 Base.metadata.create_all(bind=_engine)
 _TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 

@@ -70,6 +70,14 @@ def test_csv_import_with_tags(client):
     assert "Economic" in cats
 
 
+def test_csv_import_header_only(client):
+    """CSV with a header row but no data rows should succeed with 0 imports."""
+    r = _csv_upload(client, "name,status\n")
+    assert r.status_code == 200
+    assert r.json()["imported"] == 0
+    assert r.json()["skipped"] == 0
+
+
 def test_csv_import_too_large(client):
     # Build a CSV > 5 MB
     big_csv = "name\n" + ("A" * 1000 + "\n") * 6000
@@ -85,6 +93,42 @@ def test_csv_import_malformed_encoding(client):
         files={"file": ("bad.csv", io.BytesIO(bad_bytes), "text/csv")},
     )
     assert r.status_code == 400
+
+
+def test_csv_import_partial_failure_preserves_valid_rows(client):
+    """Regression: when one row fails mid-batch (savepoint rollback), other rows
+    must still be committed by the final db.commit().  SQLite does not enforce
+    string-length constraints, so we force a failure via mocking."""
+    csv_text = (
+        "name,categories\n"
+        "Batch Good A,Strategy\n"
+        "Batch Bad B,FailsHere\n"
+        "Batch Good C,Economic\n"
+    )
+    import routers.games as _gmod
+    original = _gmod._save_tags
+
+    def _failing_tags(game_id, data_dict, db):
+        g = db.query(_gmod.models.Game).filter(_gmod.models.Game.id == game_id).first()
+        if g and g.name == "Batch Bad B":
+            raise Exception("Simulated tag-save failure")
+        return original(game_id, data_dict, db)
+
+    from unittest.mock import patch
+    with patch.object(_gmod, "_save_tags", _failing_tags):
+        r = _csv_upload(client, csv_text)
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["imported"] == 2, f"Expected 2 imported, got: {data}"
+    assert len(data["errors"]) == 1
+    assert "Batch Bad B" in str(data["errors"][0])
+    # Confirm the valid rows actually exist in the collection
+    games = client.get("/api/games/").json()
+    names = {g["name"] for g in games}
+    assert "Batch Good A" in names
+    assert "Batch Good C" in names
+    assert "Batch Bad B" not in names
 
 
 def test_csv_notes_truncated_at_2000_chars(client):
@@ -183,6 +227,28 @@ def test_bgg_import_year_out_of_range_nullified(client):
     assert games[0]["year_published"] is None
 
 
+def test_bgg_import_wishlist_status(client):
+    """BGG items with wishlist=1 and own=0 must be imported with status='wishlist'."""
+    wishlist_xml = _BGG_COLLECTION_XML.replace(
+        'own="1"', 'own="0"', 1
+    ).replace(
+        'wishlist="0"', 'wishlist="1"', 1
+    )
+    r = _bgg_upload(client, wishlist_xml)
+    assert r.json()["imported"] == 1
+    games = client.get("/api/games/?search=Gloomhaven").json()
+    assert games[0]["status"] == "wishlist"
+
+
+def test_bgg_import_maps_player_counts(client):
+    """min_players and max_players from the <stats> element must be saved."""
+    r = _bgg_upload(client, _BGG_COLLECTION_XML)
+    assert r.json()["imported"] == 1
+    game = client.get("/api/games/?search=Gloomhaven").json()[0]
+    assert game["min_players"] == 1
+    assert game["max_players"] == 4
+
+
 # ---------------------------------------------------------------------------
 # BGG plays XML import
 # ---------------------------------------------------------------------------
@@ -221,3 +287,46 @@ def test_bgg_plays_import_skips_unknown_game(client):
     data = r.json()
     assert data["skipped"] == 1
     assert data["imported"] == 0
+
+
+def test_bgg_plays_import_invalid_xml(client):
+    """Malformed XML in a plays file must return 400."""
+    r = client.post(
+        "/api/games/import/bgg-plays",
+        files={"file": ("plays.xml", io.BytesIO(b"<not valid xml<<<<"), "text/xml")},
+    )
+    assert r.status_code == 400
+
+
+def test_bgg_plays_import_no_plays(client):
+    """Valid XML with no <play> records must return 400."""
+    empty_plays = '<?xml version="1.0"?><plays username="x" total="0" page="1"></plays>'
+    r = client.post(
+        "/api/games/import/bgg-plays",
+        files={"file": ("plays.xml", io.BytesIO(empty_plays.encode()), "text/xml")},
+    )
+    assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# BGG rate limiter
+# ---------------------------------------------------------------------------
+
+def test_bgg_rate_limiter_returns_429_after_limit(client):
+    """After 10 rapid requests the IP-based rate limiter must return 429."""
+    import routers.games as _gmod
+    _gmod._bgg_buckets.clear()
+
+    statuses = []
+    for i in range(10):
+        r = client.get("/api/games/bgg-search?q=test")
+        statuses.append(r.status_code)
+
+    assert all(s != 429 for s in statuses), (
+        f"Rate limit triggered prematurely on request #{statuses.index(429)+1}"
+    )
+
+    r = client.get("/api/games/bgg-search?q=test")
+    assert r.status_code == 429, f"Expected 429, got {r.status_code}: {r.text}"
+
+    _gmod._bgg_buckets.clear()
