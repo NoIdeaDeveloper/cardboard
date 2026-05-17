@@ -104,7 +104,9 @@ def rename_player(player_id: int, data: schemas.PlayerUpdate, db: Session = Depe
     )
     if conflict:
         raise HTTPException(status_code=409, detail="A player with that name already exists")
+    old_name = player.name
     player.name = new_name
+    db.query(models.PlaySession).filter(models.PlaySession.winner == old_name).update({"winner": new_name})
     db.commit()
     db.refresh(player)
     logger.info("Player renamed: id=%d new_name=%r", player_id, new_name)

@@ -2193,7 +2193,18 @@ async def import_bgg_plays(file: UploadFile = File(...), db: Session = Depends(g
 
             comment = (play.findtext("comments") or "").strip() or None
 
-            for _ in range(quantity):
+            existing_count = (
+                db.query(func.count(models.PlaySession.id))
+                .filter(
+                    models.PlaySession.game_id == game.id,
+                    models.PlaySession.played_at == played_at,
+                )
+                .scalar() or 0
+            )
+            for i in range(quantity):
+                if i < existing_count:
+                    results["skipped"] += 1
+                    continue
                 db_session = models.PlaySession(
                     game_id=game.id,
                     played_at=played_at,

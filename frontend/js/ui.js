@@ -1392,13 +1392,17 @@ function buildModalContent(game, sessions, onSave, onDelete, onAddSession, onDel
       galleryFileInput.addEventListener('change', async () => {
         const files = Array.from(galleryFileInput.files);
         for (const file of files) {
-          await onUploadGalleryImage(game.id, file, (newImg) => {
-            galleryImages.push(newImg);
-            renderGallery();
-            if (galleryImages.length === 1) {
-              onGalleryPrimaryChanged(`/api/games/${game.id}/images/${newImg.id}/file`);
-            }
-          });
+          try {
+            await onUploadGalleryImage(game.id, file, (newImg) => {
+              galleryImages.push(newImg);
+              renderGallery();
+              if (galleryImages.length === 1) {
+                onGalleryPrimaryChanged(`/api/games/${game.id}/images/${newImg.id}/file`);
+              }
+            });
+          } catch (err) {
+            showToast(`Failed to upload "${file.name}": ${err.message || 'Unknown error'}`, 'error');
+          }
         }
         galleryFileInput.value = '';
       });
