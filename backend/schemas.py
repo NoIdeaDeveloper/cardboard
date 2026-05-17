@@ -489,6 +489,31 @@ class CollectionHealth(BaseModel):
     unique_mechanics: int
 
 
+class BestPlayerCountEntry(BaseModel):
+    game_id: int
+    game_name: str
+    player_count: int
+    avg_rating: float
+    total_sessions: int
+    image_url: Optional[str] = None
+
+
+class PlayProjection(BaseModel):
+    unplayed_count: int
+    avg_plays_per_week: float
+    projected_clear_date: Optional[date] = None   # estimated date all unplayed games are played
+    weeks_to_clear: Optional[float] = None
+
+
+class CollectionChurn(BaseModel):
+    total_ever_acquired: int = 0
+    total_sold: int = 0
+    current_owned: int = 0
+    churn_rate: float = 0.0   # sold / total_ever_acquired, 0–1
+    acquired_this_year: int = 0
+    sold_this_year: int = 0
+
+
 class TopWishlistEntry(BaseModel):
     id: int
     name: str
@@ -535,3 +560,7 @@ class StatsResponse(BaseModel):
     weekly_streak: int = 0
     top_wishlist_game: Optional[TopWishlistEntry] = None
     unplayed_with_top_mechanic: int = 0
+    best_at_player_counts: List[BestPlayerCountEntry] = []
+    play_projection: Optional[PlayProjection] = None
+    collection_churn: Optional[CollectionChurn] = None
+    health_notifications: List[str] = []

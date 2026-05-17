@@ -605,6 +605,119 @@ def get_stats(db: Session = Depends(get_db)):
             .scalar() or 0
         )
 
+    # ── Best at X Players ──────────────────────────────────────────────────
+    # Requires at least 2 sessions at a given player count to be meaningful.
+    player_count_ratings = (
+        db.query(
+            models.PlaySession.game_id,
+            models.PlaySession.player_count,
+            func.avg(models.PlaySession.session_rating).label("avg_r"),
+            func.count(models.PlaySession.id).label("cnt"),
+        )
+        .join(models.Game, models.Game.id == models.PlaySession.game_id)
+        .filter(
+            models.PlaySession.session_rating.isnot(None),
+            models.PlaySession.player_count.isnot(None),
+            models.Game.status == "owned",
+            models.Game.parent_game_id.is_(None),
+        )
+        .group_by(models.PlaySession.game_id, models.PlaySession.player_count)
+        .having(func.count(models.PlaySession.id) >= 2)
+        .all()
+    )
+    best_by_game: dict[int, tuple[int, float, int]] = {}
+    for gid, pc, avg_r, cnt in player_count_ratings:
+        prev = best_by_game.get(gid)
+        if prev is None or avg_r > prev[1] or (avg_r == prev[1] and cnt > prev[2]):
+            best_by_game[gid] = (pc, float(avg_r), cnt)
+    if best_by_game:
+        game_rows = (
+            db.query(models.Game.id, models.Game.name, models.Game.image_url)
+            .filter(
+                models.Game.id.in_(best_by_game.keys()),
+                models.Game.status == "owned",
+                models.Game.parent_game_id.is_(None),
+            )
+            .all()
+        )
+        game_info = {g.id: (g.name, g.image_url) for g in game_rows}
+        best_at_player_counts = sorted(
+            [
+                schemas.BestPlayerCountEntry(
+                    game_id=gid,
+                    game_name=game_info[gid][0],
+                    player_count=pc,
+                    avg_rating=avg_r,
+                    total_sessions=cnt,
+                    image_url=game_info[gid][1],
+                )
+                for gid, (pc, avg_r, cnt) in best_by_game.items()
+                if gid in game_info
+            ],
+            key=lambda e: -e.avg_rating,
+        )[:10]
+    else:
+        best_at_player_counts = []
+
+    # ── Play Projection ────────────────────────────────────────────────────
+    play_projection = None
+    if total_sessions > 0 and never_played_count > 0:
+        avg_plays_per_week = total_sessions / 52.0
+        weeks_to_clear = never_played_count / avg_plays_per_week
+        projected_clear_date = today + timedelta(weeks=weeks_to_clear)
+        play_projection = schemas.PlayProjection(
+            unplayed_count=never_played_count,
+            avg_plays_per_week=round(avg_plays_per_week, 1),
+            projected_clear_date=projected_clear_date,
+            weeks_to_clear=round(weeks_to_clear, 1),
+        )
+
+    # ── Collection Churn Dashboard ─────────────────────────────────────────
+    ever_acquired = by_status["owned"] + by_status["sold"] + by_status["wishlist"]
+    current_year = str(today.year)
+    acquired_this_year, sold_this_year = db.query(
+        func.count(case((
+            models.Game.status.in_(["owned", "sold"]) & (func.strftime("%Y", models.Game.date_added) == current_year),
+            1,
+        ))),
+        func.count(case((
+            (models.Game.status == "sold") & (func.strftime("%Y", models.Game.date_added) == current_year),
+            1,
+        ))),
+    ).one()
+    collection_churn = schemas.CollectionChurn(
+        total_ever_acquired=ever_acquired,
+        total_sold=by_status["sold"],
+        current_owned=by_status["owned"],
+        churn_rate=round(by_status["sold"] / ever_acquired, 3) if ever_acquired else 0.0,
+        acquired_this_year=acquired_this_year,
+        sold_this_year=sold_this_year,
+    )
+
+    # ── Collection Health Notifications ────────────────────────────────────
+    health_notifications: list[str] = []
+    if ch := collection_health:
+        if ch.play_pct < 50 and by_status["owned"] >= 5:
+            health_notifications.append(f"Only {ch.play_pct}% of your collection has been played — dust off those boxes!")
+        if ch.diversity_score < 50:
+            health_notifications.append("Your collection is concentrated in a few mechanics — try branching out")
+    if neglected_favorite:
+        health_notifications.append(
+            f"{neglected_favorite.name} was your most-played game but hasn't hit the table in "
+            f"{neglected_favorite.months_ago} months"
+        )
+    if unplayed_with_top_mechanic > 0 and top_mechanic:
+        health_notifications.append(f"You have {unplayed_with_top_mechanic} unplayed {top_mechanic} game{'s' if unplayed_with_top_mechanic > 1 else ''}")
+    if daily_streak == 0 and weekly_streak == 0 and total_sessions >= 10:
+        health_notifications.append("No plays recently — your streaks have reset")
+    elif daily_streak > 0:
+        health_notifications.append(f"Keep it going — you're on a {daily_streak}-day play streak!")
+    if unplayed_with_top_mechanic > 0 and collection_value.unplayed_total and collection_value.unplayed_total > 0:
+        health_notifications.append(
+            f"${collection_value.unplayed_total:,.2f} worth of games are still unplayed"
+        )
+    health_notifications = health_notifications[:4]
+
     logger.info("Stats computed: %d games, %d sessions, %d expansions", total_games, total_sessions, total_expansions)
 
     return schemas.StatsResponse(
@@ -642,6 +755,10 @@ def get_stats(db: Session = Depends(get_db)):
         weekly_streak=weekly_streak,
         top_wishlist_game=top_wishlist_game,
         unplayed_with_top_mechanic=unplayed_with_top_mechanic,
+        best_at_player_counts=best_at_player_counts,
+        play_projection=play_projection,
+        collection_churn=collection_churn,
+        health_notifications=health_notifications,
     )
 
 
