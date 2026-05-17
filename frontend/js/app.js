@@ -210,6 +210,21 @@
     API.getPlayers().then(p => { state.players = p.map(pl => pl.name); state.playerObjects = p; }).catch(err => {
       console.warn('Failed to load players for autocomplete:', err);
     });
+
+    // Replay any sessions that were logged while offline
+    if (navigator.onLine && typeof flushOfflineSessionQueue === 'function') {
+      flushOfflineSessionQueue().then(n => {
+        if (n > 0) {
+          showToast(`Synced ${pluralize(n, 'offline session')}.`, 'success', 5000);
+          loadCollection().catch(() => {});
+        }
+      }).catch(() => {});
+    }
+    window.addEventListener('offlineSessionsFlushed', e => {
+      const n = e.detail.count;
+      showToast(`Synced ${pluralize(n, 'offline session')}.`, 'success', 5000);
+      loadCollection().catch(() => {});
+    });
     const initialView = location.hash.replace('#', '') || 'collection';
     const validViews = ['collection', 'add', 'stats'];
     switchView(validViews.includes(initialView) ? initialView : 'collection');
@@ -1069,6 +1084,7 @@
     document.getElementById('server-load-more')?.remove();
 
     container.innerHTML = '';
+    container.style.paddingTop = '';
 
     // Check if this is a truly empty collection (all tab, no games) vs an empty filtered tab
     const isTrulyEmpty = state.statusFilter === 'all' && state.games.length === 0 && !hasActiveFilters() && !state.search;
@@ -1226,6 +1242,23 @@
         state.virtualOffset += VIRTUAL_PAGE_SIZE;
         _observeNewCards();
         if (state.virtualOffset >= filtered.length) { _virtualPageObserver?.disconnect(); _virtualPageObserver = null; sentinel.remove(); }
+
+        // Recycle cards that have scrolled far above the viewport. Measure
+        // the height of the block to be removed *before* removing it, then
+        // compensate with padding-top so the scroll position doesn't jump.
+        // Browsers with scroll-anchoring handle this automatically; the
+        // padding ensures correct behaviour everywhere else.
+        const allCards = Array.from(container.querySelectorAll('.game-card'));
+        if (allCards.length > 3 * VIRTUAL_PAGE_SIZE) {
+          const toRemove  = allCards.slice(0, VIRTUAL_PAGE_SIZE);
+          const firstKept = allCards[VIRTUAL_PAGE_SIZE];
+          const removedHeight = firstKept
+            ? firstKept.getBoundingClientRect().top - toRemove[0].getBoundingClientRect().top
+            : 0;
+          toRemove.forEach(c => c.remove());
+          container.style.paddingTop =
+            `${parseFloat(container.style.paddingTop || '0') + removedHeight}px`;
+        }
       }, { rootMargin: '300px' });
 
       _virtualPageObserver.observe(sentinel);
@@ -1832,6 +1865,11 @@
       });
       refreshCollectionStats();
     } catch (err) {
+      if (err.isOfflineQueued) {
+        // Keep the optimistic update — session is queued and will sync on reconnect
+        showToast('Offline — session queued, will sync when back online.', 'info', 5000);
+        return;
+      }
       // Roll back optimistic update
       if (game) {
         updateGameInState(gameId, {

@@ -9,6 +9,20 @@ Cardboard uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Offline session logging** — sessions logged while the device has no connectivity are queued in IndexedDB rather than silently failing. On the next `online` event (or page load while connected) the queue is replayed in order and the collection is refreshed. A toast confirms how many sessions were synced. The optimistic UI update is preserved while offline so the card play count reflects the queued session immediately.
+- **Production asset pipeline** — `build.js` (esbuild) concatenates all seven JS files into a single content-hashed bundle (`bundle.[hash].js`) and minifies the CSS into a hashed file (`style.[hash].css`). The Dockerfile is now a two-stage build: a Node 20 Alpine stage runs the build and a Python Slim stage copies only the built `frontend/dist/` directory. Load times and transfer sizes are reduced by ~60–65%.
+
+### Changed
+
+- **Service worker cache name is now content-addressed** — the built `sw.js` derives its `CACHE_NAME` from the JS bundle hash (`cardboard-{hash}`), so every deploy creates a new cache name. Old service worker installs cannot serve stale JS or CSS because the asset filenames themselves change, eliminating the class of stale-cache bugs that required manual cache clearing.
+- **Virtual scroll DOM recycling** — when the rendered card count exceeds 3× the page size (180 cards), the oldest page of 60 cards is removed from the DOM. The removed height is measured before deletion and applied as `padding-top` so the scroll position does not jump. Browsers with scroll-anchoring handle this transparently; the padding is a fallback for those that do not. This caps DOM size at roughly 120–180 nodes regardless of collection size.
+
+### Fixed
+
+- **Unhandled server exceptions leaked raw error details** — any exception not explicitly caught by a route handler fell through to FastAPI's default handler. A new `@app.exception_handler(Exception)` middleware catches these, logs the full traceback server-side, and returns `{"detail": "Internal server error"}` with a 500 status code, ensuring no internal state is exposed to the client.
+
 ---
 
 ## [0.4.0] — 2026-05-16

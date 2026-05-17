@@ -219,3 +219,92 @@ const API = {
   getSetting: (key)        => request('GET', `/settings/${encodeURIComponent(key)}`),
   setSetting: (key, value) => request('PUT', `/settings/${encodeURIComponent(key)}`, { value }),
 };
+
+// ── Offline session queue ────────────────────────────────────────────────────
+// When addSession fails due to no connectivity, the payload is saved to
+// IndexedDB. On the next 'online' event (or page load while connected) all
+// queued sessions are replayed in order.
+
+const _OQ_DB    = 'cardboard-offline';
+const _OQ_STORE = 'pendingSessions';
+
+function _oqOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(_OQ_DB, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(_OQ_STORE, { autoIncrement: true });
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+function _oqAdd(gameId, data) {
+  return _oqOpen().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(_OQ_STORE, 'readwrite');
+    tx.objectStore(_OQ_STORE).add({ gameId, data, ts: Date.now() });
+    tx.oncomplete = resolve;
+    tx.onerror    = e => reject(e.target.error);
+  }));
+}
+
+function _oqGetAll() {
+  return _oqOpen().then(db => new Promise((resolve, reject) => {
+    const tx    = db.transaction(_OQ_STORE, 'readonly');
+    const items = [];
+    const req   = tx.objectStore(_OQ_STORE).openCursor();
+    req.onsuccess = e => {
+      const c = e.target.result;
+      if (c) { items.push({ key: c.key, ...c.value }); c.continue(); }
+      else resolve(items);
+    };
+    req.onerror = e => reject(e.target.error);
+  }));
+}
+
+function _oqDelete(key) {
+  return _oqOpen().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(_OQ_STORE, 'readwrite');
+    tx.objectStore(_OQ_STORE).delete(key);
+    tx.oncomplete = resolve;
+    tx.onerror    = e => reject(e.target.error);
+  }));
+}
+
+async function flushOfflineSessionQueue() {
+  let pending;
+  try { pending = await _oqGetAll(); } catch { return 0; }
+  if (!pending.length) return 0;
+  let flushed = 0;
+  for (const { key, gameId, data } of pending) {
+    if (!navigator.onLine) break;
+    try {
+      await request('POST', `/games/${gameId}/sessions`, data);
+      await _oqDelete(key);
+      flushed++;
+    } catch { /* still failing — leave in queue, retry next time */ }
+  }
+  return flushed;
+}
+
+// Wrap addSession: on network failure while offline, queue and throw a
+// sentinel error so callers can keep the optimistic UI update.
+const _realAddSession = API.addSession;
+API.addSession = async function(gameId, data) {
+  try {
+    return await _realAddSession(gameId, data);
+  } catch (err) {
+    if (err instanceof TypeError && !navigator.onLine) {
+      await _oqAdd(gameId, data);
+      const queued = new Error('Session queued — will sync when back online.');
+      queued.isOfflineQueued = true;
+      throw queued;
+    }
+    throw err;
+  }
+};
+
+window.addEventListener('online', async () => {
+  const n = await flushOfflineSessionQueue();
+  if (n > 0) {
+    window.dispatchEvent(new CustomEvent('offlineSessionsFlushed', { detail: { count: n } }));
+  }
+});

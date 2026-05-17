@@ -1,0 +1,10 @@
+{
+  "name": "cardboard",
+  "private": true,
+  "scripts": {
+    "build": "node build.js"
+  },
+  "dependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

@@ -1,3 +1,13 @@
+# ── Build stage: bundle and minify frontend assets ────────────────────────────
+FROM node:20-alpine AS build
+WORKDIR /build
+COPY package.json ./
+RUN npm install --no-audit --no-fund
+COPY build.js ./
+COPY frontend/ ./frontend/
+RUN node build.js
+
+# ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM python:3.12.9-slim
 
 # Prevent Python from buffering stdout/stderr and writing .pyc files
@@ -19,8 +29,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 # Copy backend source
 COPY backend/ ./
 
-# Copy frontend assets
-COPY frontend/ /app/frontend/
+# Copy the built (hashed + minified) frontend from the build stage
+COPY --from=build /build/frontend/dist /app/frontend
 
 # Pre-create the data directory; the Docker volume will be mounted here at runtime
 RUN mkdir -p /app/data
